@@ -645,6 +645,32 @@ serve(async (req) => {
 
     const systemPrompt = settings?.setting_value || 'You are SignMaker.ai, a helpful assistant for the sign industry. You help with signage and fabrication questions including channel letters, monument signs, materials, LED lighting, pricing, and installation.'
 
+    // Fetch suggested follow-ups based on question keywords
+    const questionLower = trimmedQuestion.toLowerCase();
+    let followupContext = '';
+    
+    const { data: followups } = await supabase
+      .from('suggested_followups')
+      .select('trigger_keywords, followup_questions, category')
+      .eq('is_active', true);
+    
+    if (followups) {
+      const matchedFollowup = followups.find(f => 
+        f.trigger_keywords?.some((kw: string) => questionLower.includes(kw.toLowerCase()))
+      );
+      
+      if (matchedFollowup) {
+        followupContext = `\n\nSUGGESTED FOLLOW-UPS FOR THIS TOPIC (${matchedFollowup.category}):\n${matchedFollowup.followup_questions.map((q: string) => `→ ${q}`).join('\n')}\n\nInclude 2-3 of these as clickable options at the end of your response, formatted as:\n→ [Question]`;
+        
+        // Update usage count for this followup
+        await supabase.from('suggested_followups')
+          .update({ usage_count: (matchedFollowup as any).usage_count + 1 || 1 })
+          .eq('category', matchedFollowup.category);
+      } else {
+        followupContext = '\n\nEnd your response with 2-3 relevant follow-up questions formatted as:\n→ [Question]';
+      }
+    }
+
     // Fetch user's custom training context
     let userTrainingContext = '';
     if (conversation?.user_id) {
@@ -758,6 +784,22 @@ ${userTrainingContext}
 
     const contextualPrompt = `${systemPrompt}
 
+RESPONSE STYLE - CRITICAL:
+1. BE BRIEF
+   - Simple questions: 1-2 sentences max
+   - Complex questions: 3-4 sentences max
+   - Never more than 5 sentences unless user explicitly asks for detail
+
+2. ANSWER FIRST
+   - Lead with the direct answer
+   - No preamble, no "Great question!"
+   - No restating the question
+
+3. FOLLOW-UP PROMPTS
+   - After every answer, offer 2-3 clickable follow-up options
+   - Format as: "→ [Follow-up question]"
+   - Make them specific to what was just discussed
+
 USER CONTEXT:
 Name: ${user_context?.name || 'Unknown'}
 Experience: ${user_context?.experience_level || 'Unknown'}
@@ -766,6 +808,7 @@ Messages: ${messageCount}
 ${customContextSection}
 ${shopperGuidance}
 ${b2bGuidance}
+${followupContext}
 
 MARKER RULES:
 - [REFERRAL_FORM] = asking for referral details
@@ -1009,6 +1052,46 @@ MARKER RULES:
       // Add warning after 3 off-topic messages
       if (newOffTopicCount >= 3 && newOffTopicCount < 5) {
         assistantResponse += "\n\n---\n⚠️ *It seems like you have questions outside my expertise. I specialize in signage — is there anything sign-related I can help with?*";
+      }
+    }
+
+    // KNOWLEDGE GAP DETECTION - Log when AI can't answer well
+    const knowledgeGapPhrases = [
+      "i don't have specific information",
+      "i'm not certain",
+      "you should verify",
+      "check with a professional",
+      "i cannot provide",
+      "i don't have access to",
+      "i'm not sure about the exact",
+      "consult with"
+    ];
+    
+    const responseLower = assistantResponse.toLowerCase();
+    const hasKnowledgeGap = knowledgeGapPhrases.some(phrase => responseLower.includes(phrase));
+    
+    if (hasKnowledgeGap) {
+      console.log('Knowledge gap detected, logging question');
+      
+      // Check if similar question already exists
+      const { data: existingGap } = await supabase
+        .from('knowledge_gaps')
+        .select('id, frequency')
+        .ilike('question', `%${trimmedQuestion.substring(0, 50)}%`)
+        .maybeSingle();
+      
+      if (existingGap) {
+        // Increment frequency
+        await supabase.from('knowledge_gaps')
+          .update({ frequency: (existingGap.frequency || 1) + 1 })
+          .eq('id', existingGap.id);
+      } else {
+        // Insert new knowledge gap
+        await supabase.from('knowledge_gaps').insert({
+          question: trimmedQuestion.substring(0, 500),
+          frequency: 1,
+          resolved: false
+        });
       }
     }
 

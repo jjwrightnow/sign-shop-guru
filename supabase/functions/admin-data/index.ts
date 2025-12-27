@@ -117,7 +117,10 @@ serve(async (req) => {
         referralsResult,
         signexpertsReferralsResult,
         usageStatsResult,
-        userContextResult
+        userContextResult,
+        suggestedFollowupsResult,
+        knowledgeGapsResult,
+        conversationPatternsResult
       ] = await Promise.all([
         supabase.from('users').select('*').order('created_at', { ascending: false }),
         supabase.from('conversations').select('*').order('created_at', { ascending: false }),
@@ -129,7 +132,10 @@ serve(async (req) => {
         supabase.from('referrals').select('*').order('created_at', { ascending: false }),
         supabase.from('signexperts_referrals').select('*').order('created_at', { ascending: false }),
         supabase.from('usage_stats').select('*').order('date', { ascending: false }).limit(30),
-        supabase.from('user_context').select('*').eq('is_active', true)
+        supabase.from('user_context').select('*').eq('is_active', true),
+        supabase.from('suggested_followups').select('*').order('usage_count', { ascending: false }),
+        supabase.from('knowledge_gaps').select('*').order('frequency', { ascending: false }).limit(100),
+        supabase.from('conversation_patterns').select('*').order('usage_count', { ascending: false })
       ])
 
       // Calculate training stats
@@ -203,7 +209,10 @@ serve(async (req) => {
             product_counts: productCounts,
             custom_instructions_count: customInstructions.length,
             custom_instructions_samples: customInstructions.slice(0, 10)
-          }
+          },
+          suggested_followups: suggestedFollowupsResult.data || [],
+          knowledge_gaps: knowledgeGapsResult.data || [],
+          conversation_patterns: conversationPatternsResult.data || []
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -474,6 +483,79 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, data: insertedData }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Update suggested followup
+    if (action === 'updateFollowup') {
+      const { id, updates } = data
+      const { error } = await supabase
+        .from('suggested_followups')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+      
+      if (error) throw error
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Toggle followup active status
+    if (action === 'toggleFollowup') {
+      const { id, is_active } = data
+      const { error } = await supabase
+        .from('suggested_followups')
+        .update({ is_active })
+        .eq('id', id)
+      
+      if (error) throw error
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Add new followup
+    if (action === 'addFollowup') {
+      const { error } = await supabase
+        .from('suggested_followups')
+        .insert(data)
+      
+      if (error) throw error
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Resolve knowledge gap
+    if (action === 'resolveKnowledgeGap') {
+      const { id, resolution } = data
+      const { error } = await supabase
+        .from('knowledge_gaps')
+        .update({ resolved: true, resolution })
+        .eq('id', id)
+      
+      if (error) throw error
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Delete knowledge gap
+    if (action === 'deleteKnowledgeGap') {
+      const { id } = data
+      const { error } = await supabase
+        .from('knowledge_gaps')
+        .delete()
+        .eq('id', id)
+      
+      if (error) throw error
+      return new Response(
+        JSON.stringify({ success: true }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
