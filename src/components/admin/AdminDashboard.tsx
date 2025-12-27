@@ -142,6 +142,7 @@ interface Referral {
   phone: string | null;
   email: string | null;
   timezone: string | null;
+  preferred_contact: string | null;
   best_time_to_call: string | null;
   status: string;
   notes: string | null;
@@ -773,6 +774,12 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                             <div>
                               <span className="text-muted-foreground">Timeline:</span>{" "}
                               {formatTimeline(referral.timeline)}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Preferred:</span>{" "}
+                              <span className={referral.preferred_contact ? "font-medium text-primary" : ""}>
+                                {referral.preferred_contact ? referral.preferred_contact.charAt(0).toUpperCase() + referral.preferred_contact.slice(1) : "—"}
+                              </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Best Time:</span>{" "}

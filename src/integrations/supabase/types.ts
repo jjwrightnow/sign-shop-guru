@@ -233,6 +233,7 @@ export type Database = {
           notes: string | null
           partner_id: string | null
           phone: string | null
+          preferred_contact: string | null
           project_type: string | null
           status: string | null
           timeline: string | null
@@ -250,6 +251,7 @@ export type Database = {
           notes?: string | null
           partner_id?: string | null
           phone?: string | null
+          preferred_contact?: string | null
           project_type?: string | null
           status?: string | null
           timeline?: string | null
@@ -267,6 +269,7 @@ export type Database = {
           notes?: string | null
           partner_id?: string | null
           phone?: string | null
+          preferred_contact?: string | null
           project_type?: string | null
           status?: string | null
           timeline?: string | null
