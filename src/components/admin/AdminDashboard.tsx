@@ -18,6 +18,12 @@ import {
   GraduationCap,
   Mail,
   MailCheck,
+  Lightbulb,
+  TrendingUp,
+  HelpCircle,
+  MousePointerClick,
+  Edit,
+  Check,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -167,6 +173,37 @@ interface TrainingStats {
   custom_instructions_samples: string[];
 }
 
+interface SuggestedFollowup {
+  id: string;
+  trigger_keywords: string[];
+  category: string;
+  followup_questions: string[];
+  success_rate: number | null;
+  usage_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface KnowledgeGap {
+  id: string;
+  question: string;
+  frequency: number;
+  resolved: boolean;
+  resolution: string | null;
+  created_at: string;
+}
+
+interface ConversationPattern {
+  id: string;
+  pattern_type: string;
+  trigger_phrase: string | null;
+  successful_path: string[] | null;
+  conversion_rate: number | null;
+  usage_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 const B2B_STATUSES = ['new', 'contacted', 'demo_scheduled', 'closed_won', 'closed_lost'];
 const REFERRAL_STATUSES = ['new', 'referred', 'contacted', 'quoted', 'won', 'lost'];
 
@@ -209,6 +246,11 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
     custom_instructions_samples: [],
   });
   const [trainedUsers, setTrainedUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [suggestedFollowups, setSuggestedFollowups] = useState<SuggestedFollowup[]>([]);
+  const [knowledgeGaps, setKnowledgeGaps] = useState<KnowledgeGap[]>([]);
+  const [conversationPatterns, setConversationPatterns] = useState<ConversationPattern[]>([]);
+  const [editingFollowup, setEditingFollowup] = useState<string | null>(null);
+  const [editingGapResolution, setEditingGapResolution] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAllData();
@@ -340,6 +382,17 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
           .filter((u: any) => data.training_stats.users_trained_ids.includes(u.id))
           .map((u: any) => ({ id: u.id, name: u.name, email: u.email }));
         setTrainedUsers(trainedUserDetails);
+      }
+
+      // Set intelligence data
+      if (data.suggested_followups) {
+        setSuggestedFollowups(data.suggested_followups);
+      }
+      if (data.knowledge_gaps) {
+        setKnowledgeGaps(data.knowledge_gaps);
+      }
+      if (data.conversation_patterns) {
+        setConversationPatterns(data.conversation_patterns);
       }
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -487,6 +540,70 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
     }
   };
 
+  // Intelligence functions
+  const toggleFollowup = async (id: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "toggleFollowup", data: { id, is_active: isActive } },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      setSuggestedFollowups(suggestedFollowups.map(f => f.id === id ? { ...f, is_active: isActive } : f));
+    } catch (error) {
+      console.error("Error toggling followup:", error);
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    }
+  };
+
+  const updateFollowupQuestions = async (id: string, questions: string[]) => {
+    try {
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateFollowup", data: { id, updates: { followup_questions: questions } } },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      setSuggestedFollowups(suggestedFollowups.map(f => f.id === id ? { ...f, followup_questions: questions } : f));
+      setEditingFollowup(null);
+      toast({ description: "Follow-ups updated" });
+    } catch (error) {
+      console.error("Error updating followup:", error);
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    }
+  };
+
+  const resolveKnowledgeGap = async (id: string, resolution: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "resolveKnowledgeGap", data: { id, resolution } },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      setKnowledgeGaps(knowledgeGaps.map(g => g.id === id ? { ...g, resolved: true, resolution } : g));
+      setEditingGapResolution(null);
+      toast({ description: "Knowledge gap resolved" });
+    } catch (error) {
+      console.error("Error resolving gap:", error);
+      toast({ title: "Error", description: "Failed to resolve", variant: "destructive" });
+    }
+  };
+
+  const deleteKnowledgeGap = async (id: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "deleteKnowledgeGap", data: { id } },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      setKnowledgeGaps(knowledgeGaps.filter(g => g.id !== id));
+    } catch (error) {
+      console.error("Error deleting gap:", error);
+    }
+  };
+
   const exportLeadsToCSV = () => {
     const headers = ["Name", "Email", "Phone", "Business", "Project Type", "Timeline", "Location", "Date", "Contacted"];
     const rows = leads.map(l => [
@@ -609,6 +726,7 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                 <TabsTrigger value="b2b">B2B Inquiries</TabsTrigger>
                 <TabsTrigger value="referrals">Referrals</TabsTrigger>
                 <TabsTrigger value="partners">Partners</TabsTrigger>
+                <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
                 <TabsTrigger value="training">Training Stats</TabsTrigger>
                 <TabsTrigger value="conversations">Conversations</TabsTrigger>
                 <TabsTrigger value="feedback">Feedback</TabsTrigger>
@@ -965,6 +1083,242 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                     </div>
                   )}
                 </ScrollArea>
+              </TabsContent>
+
+              {/* Intelligence Tab */}
+              <TabsContent value="intelligence" className="space-y-6">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-primary" />
+                  <h2 className="text-lg font-medium text-foreground">Conversation Intelligence</h2>
+                </div>
+
+                {/* Stats Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MousePointerClick className="w-4 h-4 text-primary" />
+                      <span className="text-xs text-muted-foreground">Active Follow-ups</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">
+                      {suggestedFollowups.filter(f => f.is_active).length}
+                    </span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-4 h-4 text-primary" />
+                      <span className="text-xs text-muted-foreground">Total Follow-up Uses</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">
+                      {suggestedFollowups.reduce((sum, f) => sum + (f.usage_count || 0), 0)}
+                    </span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <HelpCircle className="w-4 h-4 text-yellow-500" />
+                      <span className="text-xs text-muted-foreground">Unresolved Gaps</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">
+                      {knowledgeGaps.filter(g => !g.resolved).length}
+                    </span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Check className="w-4 h-4 text-green-500" />
+                      <span className="text-xs text-muted-foreground">Resolved Gaps</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">
+                      {knowledgeGaps.filter(g => g.resolved).length}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Suggested Follow-ups Management */}
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                      <MousePointerClick className="w-4 h-4" />
+                      Follow-up Suggestions
+                    </h3>
+                    <ScrollArea className="h-[400px]">
+                      {suggestedFollowups.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No follow-up suggestions configured.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {suggestedFollowups.map((followup) => (
+                            <div
+                              key={followup.id}
+                              className={`border rounded-lg p-3 ${followup.is_active ? "border-border" : "border-border opacity-60"}`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div>
+                                  <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded-full">
+                                    {followup.category}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    {followup.usage_count || 0} uses
+                                  </span>
+                                </div>
+                                <Switch
+                                  checked={followup.is_active}
+                                  onCheckedChange={(checked) => toggleFollowup(followup.id, checked)}
+                                />
+                              </div>
+                              <div className="text-xs text-muted-foreground mb-2">
+                                Keywords: {followup.trigger_keywords?.join(", ")}
+                              </div>
+                              {editingFollowup === followup.id ? (
+                                <div className="space-y-2">
+                                  <Textarea
+                                    value={followup.followup_questions?.join("\n") || ""}
+                                    onChange={(e) => {
+                                      const questions = e.target.value.split("\n").filter(q => q.trim());
+                                      setSuggestedFollowups(suggestedFollowups.map(f => 
+                                        f.id === followup.id ? { ...f, followup_questions: questions } : f
+                                      ));
+                                    }}
+                                    className="bg-muted border-border text-sm min-h-[80px]"
+                                    placeholder="One question per line"
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="bg-primary"
+                                      onClick={() => updateFollowupQuestions(followup.id, followup.followup_questions || [])}
+                                    >
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingFollowup(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <ul className="text-sm space-y-1">
+                                    {followup.followup_questions?.map((q, i) => (
+                                      <li key={i} className="text-foreground">→ {q}</li>
+                                    ))}
+                                  </ul>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="mt-2 h-7 text-xs"
+                                    onClick={() => setEditingFollowup(followup.id)}
+                                  >
+                                    <Edit className="w-3 h-3 mr-1" />
+                                    Edit
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+
+                  {/* Knowledge Gaps */}
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                      <HelpCircle className="w-4 h-4" />
+                      Knowledge Gaps
+                      <span className="text-xs text-muted-foreground">(Questions AI struggled with)</span>
+                    </h3>
+                    <ScrollArea className="h-[400px]">
+                      {knowledgeGaps.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No knowledge gaps detected yet.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {knowledgeGaps.filter(g => !g.resolved).map((gap) => (
+                            <div key={gap.id} className="border border-yellow-500/30 bg-yellow-500/5 rounded-lg p-3">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <p className="text-sm text-foreground">{gap.question}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-muted-foreground">
+                                      Asked {gap.frequency}x
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(gap.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              {editingGapResolution === gap.id ? (
+                                <div className="mt-2 space-y-2">
+                                  <Textarea
+                                    placeholder="How did you resolve this? (e.g., 'Added to knowledge base', 'Updated system prompt')"
+                                    className="bg-muted border-border text-sm min-h-[60px]"
+                                    id={`resolution-${gap.id}`}
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="bg-green-600 hover:bg-green-700"
+                                      onClick={() => {
+                                        const input = document.getElementById(`resolution-${gap.id}`) as HTMLTextAreaElement;
+                                        resolveKnowledgeGap(gap.id, input?.value || "Resolved");
+                                      }}
+                                    >
+                                      Mark Resolved
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingGapResolution(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex gap-2 mt-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    onClick={() => setEditingGapResolution(gap.id)}
+                                  >
+                                    Resolve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs text-muted-foreground"
+                                    onClick={() => deleteKnowledgeGap(gap.id)}
+                                  >
+                                    Dismiss
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          
+                          {/* Show resolved gaps collapsed */}
+                          {knowledgeGaps.filter(g => g.resolved).length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-border">
+                              <h4 className="text-xs text-muted-foreground mb-2">
+                                Resolved ({knowledgeGaps.filter(g => g.resolved).length})
+                              </h4>
+                              {knowledgeGaps.filter(g => g.resolved).slice(0, 5).map((gap) => (
+                                <div key={gap.id} className="border border-green-500/20 bg-green-500/5 rounded-lg p-2 mb-2 opacity-70">
+                                  <p className="text-xs text-foreground line-clamp-1">{gap.question}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Resolution: {gap.resolution}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                </div>
               </TabsContent>
 
               {/* Training Stats Tab */}
