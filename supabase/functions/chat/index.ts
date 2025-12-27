@@ -6,6 +6,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Pattern detection keywords
+const SHOPPER_PATTERNS = ['how much', 'cost', 'price', 'pricing', 'expensive', 'budget', 'how long', 'timeline', 'when can', 'find a', 'hire', 'recommend a', 'near me', 'in my area'];
+const OWNER_PATTERNS = ['train', 'training', 'staff', 'team', 'employees', 'sales tool', 'customer education', 'embed', 'white-label', 'api', 'integrate', 'business', 'pricing strategy', 'hiring', 'operations', 'my company', 'my shop'];
+const INSTALLER_PATTERNS = ['troubleshoot', 'fix', 'repair', 'not working', 'problem with', 'issue with', 'code', 'compliance', 'permit', 'installation', 'mounting', 'wiring', 'electrical'];
+
+function detectPatterns(messages: string[]): { shopper: number; owner: number; installer: number } {
+  const allText = messages.join(' ').toLowerCase();
+  
+  let shopper = 0, owner = 0, installer = 0;
+  
+  SHOPPER_PATTERNS.forEach(p => { if (allText.includes(p)) shopper++; });
+  OWNER_PATTERNS.forEach(p => { if (allText.includes(p)) owner++; });
+  INSTALLER_PATTERNS.forEach(p => { if (allText.includes(p)) installer++; });
+  
+  return { shopper, owner, installer };
+}
+
+function getOffer(patterns: { shopper: number; owner: number; installer: number }, offersShown: string[], currentIntent: string): { offer: string; offerType: string } | null {
+  // Don't offer shopper conversion if already a shopper
+  if (patterns.shopper >= 2 && currentIntent !== 'shopping' && !offersShown.includes('shopper')) {
+    return {
+      offer: "\n\n---\n💡 *It sounds like you might be looking to get a sign made. Would you like me to help connect you with a sign professional in your area?*",
+      offerType: 'shopper'
+    };
+  }
+  
+  if (patterns.owner >= 2 && !offersShown.includes('owner')) {
+    return {
+      offer: "\n\n---\n💼 *It sounds like you might be a sign company owner. SignMaker.ai can be customized as a training tool for your team or a sales tool for your website. Would you like to learn more?*",
+      offerType: 'owner'
+    };
+  }
+  
+  if (patterns.installer >= 2 && !offersShown.includes('installer')) {
+    return {
+      offer: "\n\n---\n🔧 *If you're working on a project and need materials or components, I can suggest suppliers in your area. Would that help?*",
+      offerType: 'installer'
+    };
+  }
+  
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -24,6 +67,38 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Fetch conversation history and metadata
+    let conversationMessages: string[] = [];
+    let offersShown: string[] = [];
+    let detectedPersona: string | null = null;
+    
+    if (conversation_id) {
+      // Get conversation metadata
+      const { data: convData } = await supabase
+        .from('conversations')
+        .select('offers_shown, detected_persona')
+        .eq('id', conversation_id)
+        .maybeSingle();
+      
+      offersShown = convData?.offers_shown || [];
+      detectedPersona = convData?.detected_persona || null;
+      
+      // Get previous messages for context and pattern detection
+      const { data: prevMessages } = await supabase
+        .from('messages')
+        .select('content, role')
+        .eq('conversation_id', conversation_id)
+        .eq('role', 'user')
+        .order('created_at', { ascending: true });
+      
+      if (prevMessages) {
+        conversationMessages = prevMessages.map(m => m.content);
+      }
+    }
+    
+    // Add current question to messages for pattern detection
+    conversationMessages.push(question);
 
     // Fetch system prompt from settings
     const { data: settings } = await supabase
@@ -84,7 +159,28 @@ Adapt your response based on their experience level and intent. For beginners, e
       throw new Error(data.error.message)
     }
 
-    const assistantResponse = data.content[0].text
+    let assistantResponse = data.content[0].text
+
+    // Pattern detection after 3+ messages
+    if (conversationMessages.length >= 3) {
+      const patterns = detectPatterns(conversationMessages);
+      console.log('Detected patterns:', patterns);
+      
+      const offer = getOffer(patterns, offersShown, user_context?.intent || '');
+      
+      if (offer) {
+        assistantResponse += offer.offer;
+        offersShown = [...offersShown, offer.offerType];
+        
+        // Determine detected persona based on highest pattern count
+        const maxPattern = Math.max(patterns.shopper, patterns.owner, patterns.installer);
+        if (maxPattern >= 2) {
+          if (patterns.shopper === maxPattern) detectedPersona = 'shopper';
+          else if (patterns.owner === maxPattern) detectedPersona = 'owner';
+          else if (patterns.installer === maxPattern) detectedPersona = 'installer';
+        }
+      }
+    }
 
     // Save messages to database if conversation_id provided
     if (conversation_id) {
@@ -101,6 +197,15 @@ Adapt your response based on their experience level and intent. For beginners, e
         role: 'assistant',
         content: assistantResponse
       })
+      
+      // Update conversation with offers shown and detected persona
+      await supabase
+        .from('conversations')
+        .update({ 
+          offers_shown: offersShown,
+          detected_persona: detectedPersona
+        })
+        .eq('id', conversation_id);
     }
 
     return new Response(

@@ -12,7 +12,9 @@ import {
   Zap,
   ShoppingBag,
   Download,
-  Check,
+  Building2,
+  Handshake,
+  Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +26,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -37,6 +53,7 @@ interface Stats {
   helpfulFeedback: number;
   notHelpfulFeedback: number;
   totalLeads: number;
+  totalB2BInquiries: number;
 }
 
 interface ConversationRow {
@@ -57,7 +74,6 @@ interface FeedbackRow {
   created_at: string;
   message_content: string;
   assistant_response: string;
-  flagged?: boolean;
 }
 
 interface GapRow {
@@ -87,6 +103,52 @@ interface LeadRow {
   contacted: boolean;
 }
 
+interface B2BInquiry {
+  id: string;
+  company_name: string | null;
+  role: string | null;
+  contact_info: string | null;
+  interest_type: string | null;
+  goals: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+}
+
+interface Partner {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  email: string | null;
+  phone: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  services: string[] | null;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+}
+
+interface Referral {
+  id: string;
+  user_id: string | null;
+  partner_id: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  project_type: string | null;
+  timeline: string | null;
+  phone: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  user_name?: string;
+  user_email?: string;
+  partner_name?: string;
+}
+
+const B2B_STATUSES = ['new', 'contacted', 'demo_scheduled', 'closed_won', 'closed_lost'];
+const REFERRAL_STATUSES = ['new', 'referred', 'contacted', 'quoted', 'won', 'lost'];
+
 const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const { toast } = useToast();
   const [stats, setStats] = useState<Stats>({
@@ -97,16 +159,25 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     helpfulFeedback: 0,
     notHelpfulFeedback: 0,
     totalLeads: 0,
+    totalB2BInquiries: 0,
   });
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [gaps, setGaps] = useState<GapRow[]>([]);
   const [settings, setSettings] = useState<SettingRow[]>([]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
+  const [b2bInquiries, setB2BInquiries] = useState<B2BInquiry[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [feedbackFilter, setFeedbackFilter] = useState<"all" | "helpful" | "not_helpful">("all");
   const [expandedConversation, setExpandedConversation] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showPartnerDialog, setShowPartnerDialog] = useState(false);
+  const [newPartner, setNewPartner] = useState<Partial<Partner>>({
+    company_name: "",
+    is_active: true,
+  });
 
   useEffect(() => {
     fetchAllData();
@@ -121,18 +192,22 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       fetchGaps(),
       fetchSettings(),
       fetchLeads(),
+      fetchB2BInquiries(),
+      fetchPartners(),
+      fetchReferrals(),
     ]);
     setIsLoading(false);
   };
 
   const fetchStats = async () => {
     try {
-      const [users, convos, messages, feedbackData, leadsData] = await Promise.all([
+      const [users, convos, messages, feedbackData, leadsData, b2bData] = await Promise.all([
         supabase.from("users").select("id", { count: "exact" }),
         supabase.from("conversations").select("id", { count: "exact" }),
         supabase.from("messages").select("id, created_at", { count: "exact" }),
         supabase.from("feedback").select("rating"),
         supabase.from("users").select("id", { count: "exact" }).eq("intent", "shopping"),
+        supabase.from("b2b_inquiries").select("id", { count: "exact" }),
       ]);
 
       const today = new Date();
@@ -153,6 +228,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
         helpfulFeedback: helpful,
         notHelpfulFeedback: notHelpful,
         totalLeads: leadsData.count || 0,
+        totalB2BInquiries: b2bData.count || 0,
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -299,6 +375,60 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     }
   };
 
+  const fetchB2BInquiries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("b2b_inquiries")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setB2BInquiries(data || []);
+    } catch (error) {
+      console.error("Error fetching B2B inquiries:", error);
+    }
+  };
+
+  const fetchPartners = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("partners")
+        .select("*")
+        .order("company_name");
+
+      if (error) throw error;
+      setPartners(data || []);
+    } catch (error) {
+      console.error("Error fetching partners:", error);
+    }
+  };
+
+  const fetchReferrals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("referrals")
+        .select(`
+          *,
+          users (name, email),
+          partners (company_name)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      
+      const referralsWithDetails = (data || []).map((r: any) => ({
+        ...r,
+        user_name: r.users?.name,
+        user_email: r.users?.email,
+        partner_name: r.partners?.company_name,
+      }));
+      
+      setReferrals(referralsWithDetails);
+    } catch (error) {
+      console.error("Error fetching referrals:", error);
+    }
+  };
+
   const updateSetting = async (id: string, value: string, isActive: boolean) => {
     try {
       const { error } = await supabase
@@ -327,6 +457,109 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     } catch (error) {
       console.error("Error updating lead:", error);
       toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+    }
+  };
+
+  const updateB2BStatus = async (id: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from("b2b_inquiries")
+        .update({ status })
+        .eq("id", id);
+
+      if (error) throw error;
+      setB2BInquiries(b2bInquiries.map(i => i.id === id ? { ...i, status } : i));
+    } catch (error) {
+      console.error("Error updating B2B inquiry:", error);
+      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+    }
+  };
+
+  const updateB2BNotes = async (id: string, notes: string) => {
+    try {
+      const { error } = await supabase
+        .from("b2b_inquiries")
+        .update({ notes })
+        .eq("id", id);
+
+      if (error) throw error;
+      setB2BInquiries(b2bInquiries.map(i => i.id === id ? { ...i, notes } : i));
+      toast({ description: "Notes saved" });
+    } catch (error) {
+      console.error("Error updating notes:", error);
+    }
+  };
+
+  const updateReferralStatus = async (id: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from("referrals")
+        .update({ status })
+        .eq("id", id);
+
+      if (error) throw error;
+      setReferrals(referrals.map(r => r.id === id ? { ...r, status } : r));
+    } catch (error) {
+      console.error("Error updating referral:", error);
+    }
+  };
+
+  const updateReferralPartner = async (id: string, partnerId: string) => {
+    try {
+      const { error } = await supabase
+        .from("referrals")
+        .update({ partner_id: partnerId })
+        .eq("id", id);
+
+      if (error) throw error;
+      const partner = partners.find(p => p.id === partnerId);
+      setReferrals(referrals.map(r => r.id === id ? { ...r, partner_id: partnerId, partner_name: partner?.company_name } : r));
+    } catch (error) {
+      console.error("Error updating referral partner:", error);
+    }
+  };
+
+  const togglePartnerActive = async (id: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("partners")
+        .update({ is_active: isActive })
+        .eq("id", id);
+
+      if (error) throw error;
+      setPartners(partners.map(p => p.id === id ? { ...p, is_active: isActive } : p));
+    } catch (error) {
+      console.error("Error updating partner:", error);
+    }
+  };
+
+  const addPartner = async () => {
+    if (!newPartner.company_name) return;
+    
+    try {
+      const { error } = await supabase
+        .from("partners")
+        .insert({
+          company_name: newPartner.company_name,
+          contact_name: newPartner.contact_name || null,
+          email: newPartner.email || null,
+          phone: newPartner.phone || null,
+          location_city: newPartner.location_city || null,
+          location_state: newPartner.location_state || null,
+          services: newPartner.services || null,
+          is_active: newPartner.is_active ?? true,
+          notes: newPartner.notes || null,
+        });
+
+      if (error) throw error;
+      
+      setShowPartnerDialog(false);
+      setNewPartner({ company_name: "", is_active: true });
+      fetchPartners();
+      toast({ description: "Partner added successfully" });
+    } catch (error) {
+      console.error("Error adding partner:", error);
+      toast({ title: "Error", description: "Failed to add partner", variant: "destructive" });
     }
   };
 
@@ -392,6 +625,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     return timelines[timeline] || timeline;
   };
 
+  const formatStatus = (status: string) => {
+    return status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -430,7 +667,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
         ) : (
           <>
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
               <StatCard icon={Users} label="Total Users" value={stats.totalUsers} />
               <StatCard icon={MessageSquare} label="Conversations" value={stats.totalConversations} />
               <StatCard icon={MessageSquare} label="Total Messages" value={stats.totalMessages} />
@@ -438,12 +675,16 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
               <StatCard icon={ThumbsUp} label="Helpful" value={stats.helpfulFeedback} />
               <StatCard icon={ThumbsDown} label="Not Helpful" value={stats.notHelpfulFeedback} />
               <StatCard icon={ShoppingBag} label="Leads" value={stats.totalLeads} accent />
+              <StatCard icon={Building2} label="B2B Inquiries" value={stats.totalB2BInquiries} accent />
             </div>
 
             {/* Tabs */}
             <Tabs defaultValue="leads" className="space-y-4">
-              <TabsList className="bg-surface border border-border">
+              <TabsList className="bg-surface border border-border flex-wrap h-auto">
                 <TabsTrigger value="leads">Leads</TabsTrigger>
+                <TabsTrigger value="b2b">B2B Inquiries</TabsTrigger>
+                <TabsTrigger value="referrals">Referrals</TabsTrigger>
+                <TabsTrigger value="partners">Partners</TabsTrigger>
                 <TabsTrigger value="conversations">Conversations</TabsTrigger>
                 <TabsTrigger value="feedback">Feedback</TabsTrigger>
                 <TabsTrigger value="gaps">Gap Tracking</TabsTrigger>
@@ -507,6 +748,277 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                                   Contacted
                                 </Label>
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              {/* B2B Inquiries Tab */}
+              <TabsContent value="b2b" className="space-y-4">
+                <h2 className="text-lg font-medium text-foreground">B2B Inquiries</h2>
+
+                <ScrollArea className="h-[600px]">
+                  {b2bInquiries.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No B2B inquiries yet. These appear when users express interest in customized solutions.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {b2bInquiries.map((inquiry) => (
+                        <div key={inquiry.id} className="bg-card border border-border rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">{inquiry.company_name || "—"}</span>
+                                <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded-full">
+                                  {inquiry.role || "Unknown role"}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{inquiry.contact_info || "No contact info"}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs text-muted-foreground">{formatDate(inquiry.created_at)}</p>
+                              <Select
+                                value={inquiry.status}
+                                onValueChange={(v) => updateB2BStatus(inquiry.id, v)}
+                              >
+                                <SelectTrigger className="w-32 h-8 mt-1 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-card border-border">
+                                  {B2B_STATUSES.map(s => (
+                                    <SelectItem key={s} value={s}>{formatStatus(s)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          {inquiry.interest_type && (
+                            <p className="text-sm text-foreground mb-2">
+                              <span className="text-muted-foreground">Interest:</span> {inquiry.interest_type}
+                            </p>
+                          )}
+                          {inquiry.goals && (
+                            <p className="text-sm text-foreground mb-2">
+                              <span className="text-muted-foreground">Goals:</span> {inquiry.goals}
+                            </p>
+                          )}
+                          <Textarea
+                            placeholder="Add notes..."
+                            value={inquiry.notes || ""}
+                            onChange={(e) => setB2BInquiries(b2bInquiries.map(i => i.id === inquiry.id ? { ...i, notes: e.target.value } : i))}
+                            onBlur={() => updateB2BNotes(inquiry.id, inquiry.notes || "")}
+                            className="bg-muted border-border text-sm min-h-[60px]"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Referrals Tab */}
+              <TabsContent value="referrals" className="space-y-4">
+                <h2 className="text-lg font-medium text-foreground">Shopper Referrals</h2>
+
+                <ScrollArea className="h-[600px]">
+                  {referrals.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No referrals yet. These appear when shoppers request to be connected with a sign professional.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {referrals.map((referral) => (
+                        <div key={referral.id} className="bg-card border border-border rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <span className="font-medium text-foreground">{referral.user_name || "Unknown"}</span>
+                              <p className="text-sm text-muted-foreground">
+                                {referral.user_email} {referral.phone && `• ${referral.phone}`}
+                              </p>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{formatDate(referral.created_at)}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Location:</span>{" "}
+                              {referral.location_city && referral.location_state 
+                                ? `${referral.location_city}, ${referral.location_state}` 
+                                : "—"}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Project:</span>{" "}
+                              {formatProjectType(referral.project_type)}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Timeline:</span>{" "}
+                              {formatTimeline(referral.timeline)}
+                            </div>
+                          </div>
+                          <div className="flex gap-3">
+                            <Select
+                              value={referral.partner_id || ""}
+                              onValueChange={(v) => updateReferralPartner(referral.id, v)}
+                            >
+                              <SelectTrigger className="flex-1 h-8 text-xs">
+                                <SelectValue placeholder="Assign Partner" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-card border-border">
+                                {partners.filter(p => p.is_active).map(p => (
+                                  <SelectItem key={p.id} value={p.id}>{p.company_name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={referral.status}
+                              onValueChange={(v) => updateReferralStatus(referral.id, v)}
+                            >
+                              <SelectTrigger className="w-28 h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-card border-border">
+                                {REFERRAL_STATUSES.map(s => (
+                                  <SelectItem key={s} value={s}>{formatStatus(s)}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Partners Tab */}
+              <TabsContent value="partners" className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-medium text-foreground">Partner Sign Shops</h2>
+                  <Dialog open={showPartnerDialog} onOpenChange={setShowPartnerDialog}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="gap-2 bg-primary">
+                        <Plus className="w-4 h-4" />
+                        Add Partner
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-card border-border">
+                      <DialogHeader>
+                        <DialogTitle>Add Partner Shop</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Company Name *</Label>
+                          <Input
+                            value={newPartner.company_name || ""}
+                            onChange={e => setNewPartner({ ...newPartner, company_name: e.target.value })}
+                            className="bg-muted border-border"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Contact Name</Label>
+                            <Input
+                              value={newPartner.contact_name || ""}
+                              onChange={e => setNewPartner({ ...newPartner, contact_name: e.target.value })}
+                              className="bg-muted border-border"
+                            />
+                          </div>
+                          <div>
+                            <Label>Email</Label>
+                            <Input
+                              type="email"
+                              value={newPartner.email || ""}
+                              onChange={e => setNewPartner({ ...newPartner, email: e.target.value })}
+                              className="bg-muted border-border"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Phone</Label>
+                            <Input
+                              value={newPartner.phone || ""}
+                              onChange={e => setNewPartner({ ...newPartner, phone: e.target.value })}
+                              className="bg-muted border-border"
+                            />
+                          </div>
+                          <div>
+                            <Label>City</Label>
+                            <Input
+                              value={newPartner.location_city || ""}
+                              onChange={e => setNewPartner({ ...newPartner, location_city: e.target.value })}
+                              className="bg-muted border-border"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label>State</Label>
+                          <Input
+                            value={newPartner.location_state || ""}
+                            onChange={e => setNewPartner({ ...newPartner, location_state: e.target.value })}
+                            className="bg-muted border-border"
+                          />
+                        </div>
+                        <div>
+                          <Label>Notes</Label>
+                          <Textarea
+                            value={newPartner.notes || ""}
+                            onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })}
+                            className="bg-muted border-border"
+                          />
+                        </div>
+                        <Button onClick={addPartner} className="w-full bg-primary">Add Partner</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
+                <ScrollArea className="h-[600px]">
+                  {partners.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No partners yet. Add partner sign shops to assign referrals.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {partners.map((partner) => (
+                        <div
+                          key={partner.id}
+                          className={`bg-card border rounded-lg p-4 ${
+                            partner.is_active ? "border-border" : "border-border opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">{partner.company_name}</span>
+                                {!partner.is_active && (
+                                  <span className="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded-full">
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {partner.contact_name && <p>{partner.contact_name}</p>}
+                                <p>
+                                  {partner.email && partner.email}
+                                  {partner.email && partner.phone && " • "}
+                                  {partner.phone && partner.phone}
+                                </p>
+                                {(partner.location_city || partner.location_state) && (
+                                  <p>{[partner.location_city, partner.location_state].filter(Boolean).join(", ")}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-muted-foreground">Active</Label>
+                              <Switch
+                                checked={partner.is_active}
+                                onCheckedChange={(checked) => togglePartnerActive(partner.id, checked)}
+                              />
                             </div>
                           </div>
                         </div>
