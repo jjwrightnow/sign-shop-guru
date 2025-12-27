@@ -4,6 +4,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import IntakeFormModal from "@/components/IntakeFormModal";
+import ConversationSidebar from "@/components/ConversationSidebar";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -22,13 +23,21 @@ interface UserData {
   intent: string;
 }
 
+interface ConversationData {
+  id: string;
+  created_at: string;
+  first_message?: string;
+  message_count?: number;
+}
+
 const Index = () => {
   const { toast } = useToast();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [conversations, setConversations] = useState<ConversationData[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [lastAssistantMessageId, setLastAssistantMessageId] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,12 +47,178 @@ const Index = () => {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const handleIntakeComplete = (data: UserData) => {
+  // Check for returning user on mount
+  useEffect(() => {
+    const checkReturningUser = async () => {
+      const storedEmail = localStorage.getItem("signmaker_user_email");
+      if (storedEmail) {
+        try {
+          const { data: user, error } = await supabase
+            .from("users")
+            .select("*")
+            .eq("email", storedEmail)
+            .maybeSingle();
+
+          if (user && !error) {
+            // Get latest conversation
+            const { data: latestConvo } = await supabase
+              .from("conversations")
+              .select("id")
+              .eq("user_id", user.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (latestConvo) {
+              setUserData({
+                userId: user.id,
+                conversationId: latestConvo.id,
+                name: user.name,
+                experienceLevel: user.experience_level,
+                intent: user.intent,
+              });
+              
+              // Load messages for this conversation
+              await loadConversationMessages(latestConvo.id, user.name);
+              await loadUserConversations(user.id);
+            }
+          }
+        } catch (error) {
+          console.error("Error checking returning user:", error);
+        }
+      }
+    };
+
+    checkReturningUser();
+  }, []);
+
+  const loadUserConversations = async (userId: string) => {
+    setIsLoadingConversations(true);
+    try {
+      const { data: convos, error } = await supabase
+        .from("conversations")
+        .select("id, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // Get first message for each conversation
+      const conversationsWithPreview = await Promise.all(
+        (convos || []).map(async (conv) => {
+          const { data: messages } = await supabase
+            .from("messages")
+            .select("content, role")
+            .eq("conversation_id", conv.id)
+            .eq("role", "user")
+            .order("created_at", { ascending: true })
+            .limit(1);
+
+          return {
+            id: conv.id,
+            created_at: conv.created_at,
+            first_message: messages?.[0]?.content || "",
+            message_count: 0,
+          };
+        })
+      );
+
+      setConversations(conversationsWithPreview);
+    } catch (error) {
+      console.error("Error loading conversations:", error);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  };
+
+  const loadConversationMessages = async (conversationId: string, userName: string) => {
+    try {
+      const { data: dbMessages, error } = await supabase
+        .from("messages")
+        .select("id, content, role, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      if (dbMessages && dbMessages.length > 0) {
+        const loadedMessages: Message[] = dbMessages.map((msg) => ({
+          id: msg.id,
+          content: msg.content,
+          isUser: msg.role === "user",
+          dbId: msg.id,
+        }));
+        setMessages(loadedMessages);
+      } else {
+        // No messages, show welcome
+        const welcomeMessage = `Hey ${userName} — I help with signage and fabrication questions. What would you like to know?`;
+        setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+      }
+    } catch (error) {
+      console.error("Error loading messages:", error);
+    }
+  };
+
+  const handleIntakeComplete = async (data: UserData) => {
+    // Store email for returning user check
+    const storedEmail = localStorage.getItem("signmaker_user_email");
+    if (!storedEmail) {
+      // Get the email from the user we just created
+      const { data: user } = await supabase
+        .from("users")
+        .select("email")
+        .eq("id", data.userId)
+        .single();
+      
+      if (user?.email) {
+        localStorage.setItem("signmaker_user_email", user.email);
+      }
+    }
+
     setUserData(data);
     
     // Set personalized welcome message
     const welcomeMessage = `Hey ${data.name} — I help with signage and fabrication questions. What would you like to know?`;
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+
+    // Load conversations for sidebar
+    await loadUserConversations(data.userId);
+  };
+
+  const handleSelectConversation = async (conversationId: string) => {
+    if (!userData) return;
+
+    setUserData({ ...userData, conversationId });
+    await loadConversationMessages(conversationId, userData.name);
+  };
+
+  const handleNewChat = async () => {
+    if (!userData) return;
+
+    try {
+      const { data: newConvo, error } = await supabase
+        .from("conversations")
+        .insert({ user_id: userData.userId })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setUserData({ ...userData, conversationId: newConvo.id });
+      
+      const welcomeMessage = `Hey ${userData.name} — I help with signage and fabrication questions. What would you like to know?`;
+      setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+
+      // Refresh conversations list
+      await loadUserConversations(userData.userId);
+    } catch (error: any) {
+      console.error("Error creating new chat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create new chat",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSend = async (content: string) => {
@@ -83,7 +258,6 @@ const Index = () => {
         .limit(1);
 
       const dbMessageId = messagesData?.[0]?.id;
-      setLastAssistantMessageId(dbMessageId || null);
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
@@ -92,6 +266,9 @@ const Index = () => {
         dbId: dbMessageId,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Refresh conversations to update first_message if this is first message
+      await loadUserConversations(userData.userId);
     } catch (error: any) {
       console.error("Chat error:", error);
       toast({
@@ -105,30 +282,42 @@ const Index = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
       
-      <ChatHeader />
-      
-      <main className="flex-1 overflow-y-auto">
-        <div className="container max-w-4xl mx-auto py-6 px-4">
-          <div className="flex flex-col gap-4">
-            {messages.map((message, index) => (
-              <ChatMessage
-                key={message.id}
-                content={message.content}
-                isUser={message.isUser}
-                showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
-                messageId={message.dbId}
-              />
-            ))}
-            {isTyping && <TypingIndicator />}
-            <div ref={messagesEndRef} />
+      {userData && (
+        <ConversationSidebar
+          conversations={conversations}
+          activeConversationId={userData.conversationId}
+          onSelectConversation={handleSelectConversation}
+          onNewChat={handleNewChat}
+          isLoading={isLoadingConversations}
+        />
+      )}
+
+      <div className="flex-1 flex flex-col">
+        <ChatHeader />
+        
+        <main className="flex-1 overflow-y-auto">
+          <div className="container max-w-4xl mx-auto py-6 px-4">
+            <div className="flex flex-col gap-4">
+              {messages.map((message, index) => (
+                <ChatMessage
+                  key={message.id}
+                  content={message.content}
+                  isUser={message.isUser}
+                  showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
+                  messageId={message.dbId}
+                />
+              ))}
+              {isTyping && <TypingIndicator />}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
-        </div>
-      </main>
-      
-      <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
+        </main>
+        
+        <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
+      </div>
     </div>
   );
 };
