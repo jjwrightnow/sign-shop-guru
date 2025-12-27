@@ -35,6 +35,51 @@ export type Database = {
         }
         Relationships: []
       }
+      alerts: {
+        Row: {
+          alert_type: string
+          conversation_id: string | null
+          details: Json | null
+          id: string
+          sent_at: string | null
+          subject: string
+          user_id: string | null
+        }
+        Insert: {
+          alert_type: string
+          conversation_id?: string | null
+          details?: Json | null
+          id?: string
+          sent_at?: string | null
+          subject: string
+          user_id?: string | null
+        }
+        Update: {
+          alert_type?: string
+          conversation_id?: string | null
+          details?: Json | null
+          id?: string
+          sent_at?: string | null
+          subject?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alerts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       b2b_inquiries: {
         Row: {
           company_name: string | null
@@ -250,6 +295,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      insights_reports: {
+        Row: {
+          created_at: string | null
+          id: string
+          insights: string | null
+          metrics: Json | null
+          period_end: string
+          period_start: string
+          recommendations: string[] | null
+          report_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          insights?: string | null
+          metrics?: Json | null
+          period_end: string
+          period_start: string
+          recommendations?: string[] | null
+          report_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          insights?: string | null
+          metrics?: Json | null
+          period_end?: string
+          period_start?: string
+          recommendations?: string[] | null
+          report_type?: string | null
+        }
+        Relationships: []
       }
       knowledge_gaps: {
         Row: {

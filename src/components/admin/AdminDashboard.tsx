@@ -220,6 +220,25 @@ interface ConversationPattern {
   created_at: string;
 }
 
+interface InsightsReport {
+  id: string;
+  report_type: string;
+  period_start: string;
+  period_end: string;
+  metrics: Record<string, any>;
+  insights: string;
+  recommendations: string[] | null;
+  created_at: string;
+}
+
+interface Alert {
+  id: string;
+  alert_type: string;
+  subject: string;
+  details: Record<string, any>;
+  sent_at: string;
+}
+
 const B2B_STATUSES = ['new', 'contacted', 'demo_scheduled', 'closed_won', 'closed_lost'];
 const REFERRAL_STATUSES = ['new', 'referred', 'contacted', 'quoted', 'won', 'lost'];
 
@@ -270,6 +289,10 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
   const [abTestResults, setABTestResults] = useState<Record<string, ABTestResult[]>>({});
   const [showCreateVariant, setShowCreateVariant] = useState<string | null>(null);
   const [newVariantQuestions, setNewVariantQuestions] = useState<string>("");
+  const [insightsReports, setInsightsReports] = useState<InsightsReport[]>([]);
+  const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<InsightsReport | null>(null);
 
   useEffect(() => {
     fetchAllData();
@@ -413,11 +436,42 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
       if (data.conversation_patterns) {
         setConversationPatterns(data.conversation_patterns);
       }
+      if (data.insights_reports) {
+        setInsightsReports(data.insights_reports);
+      }
+      if (data.recent_alerts) {
+        setRecentAlerts(data.recent_alerts);
+      }
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error", description: "Failed to load admin data", variant: "destructive" });
     }
     setIsLoading(false);
+  };
+
+  // Generate insights report
+  const generateInsightsReport = async () => {
+    setIsGeneratingInsights(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-insights", {
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      
+      toast({ description: "Insights report generated and emailed!" });
+      
+      // Refresh data to get new report
+      fetchAllData();
+    } catch (error: any) {
+      console.error("Error generating insights:", error);
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to generate insights report", 
+        variant: "destructive" 
+      });
+    }
+    setIsGeneratingInsights(false);
   };
 
   // Legacy fetch functions removed - all data now fetched via fetchAllData using edge function

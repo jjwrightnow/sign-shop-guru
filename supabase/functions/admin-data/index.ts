@@ -120,7 +120,9 @@ serve(async (req) => {
         userContextResult,
         suggestedFollowupsResult,
         knowledgeGapsResult,
-        conversationPatternsResult
+        conversationPatternsResult,
+        insightsReportsResult,
+        alertsResult
       ] = await Promise.all([
         supabase.from('users').select('*').order('created_at', { ascending: false }),
         supabase.from('conversations').select('*').order('created_at', { ascending: false }),
@@ -135,7 +137,9 @@ serve(async (req) => {
         supabase.from('user_context').select('*').eq('is_active', true),
         supabase.from('suggested_followups').select('*').order('usage_count', { ascending: false }),
         supabase.from('knowledge_gaps').select('*').order('frequency', { ascending: false }).limit(100),
-        supabase.from('conversation_patterns').select('*').order('usage_count', { ascending: false })
+        supabase.from('conversation_patterns').select('*').order('usage_count', { ascending: false }),
+        supabase.from('insights_reports').select('*').order('created_at', { ascending: false }).limit(10),
+        supabase.from('alerts').select('*').order('sent_at', { ascending: false }).limit(20)
       ])
 
       // Calculate training stats
@@ -212,7 +216,9 @@ serve(async (req) => {
           },
           suggested_followups: suggestedFollowupsResult.data || [],
           knowledge_gaps: knowledgeGapsResult.data || [],
-          conversation_patterns: conversationPatternsResult.data || []
+          conversation_patterns: conversationPatternsResult.data || [],
+          insights_reports: insightsReportsResult.data || [],
+          recent_alerts: alertsResult.data || []
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
