@@ -12,8 +12,24 @@ const MARKERS = {
   REFERRAL_FORM: '[REFERRAL_FORM]',
   REFERRAL_SUBMIT: '[REFERRAL_SUBMIT]',
   B2B_FORM: '[B2B_FORM]',
-  B2B_SUBMIT: '[B2B_SUBMIT]'
+  B2B_SUBMIT: '[B2B_SUBMIT]',
+  TRANSCRIPT_OFFER: '[TRANSCRIPT_OFFER]',
+  TRANSCRIPT_SEND: '[TRANSCRIPT_SEND]'
 };
+
+// Closing phrases that trigger transcript offer
+const CLOSING_PHRASES = [
+  'thanks', 'thank you', 'thats all', 'bye', 'goodbye', 
+  'that helps', 'perfect', 'got it', 'appreciate it', 
+  'great help', 'very helpful', 'exactly what i needed'
+];
+
+// Phrases indicating user wants transcript
+const TRANSCRIPT_YES_PHRASES = [
+  'yes', 'sure', 'please', 'send it', 'email it', 
+  'that would be great', 'sounds good',
+  'go ahead', 'absolutely', 'definitely', 'yeah'
+];
 
 // Email notification helper
 async function sendNotificationEmail(
@@ -253,6 +269,8 @@ function cleanAllMarkers(response: string): string {
     .replace(/\[REFERRAL_SUBMIT\]/g, '')
     .replace(/\[B2B_FORM\]/g, '')
     .replace(/\[B2B_SUBMIT\]/g, '')
+    .replace(/\[TRANSCRIPT_OFFER\]/g, '')
+    .replace(/\[TRANSCRIPT_SEND\]/g, '')
     .replace(/\[B2B_DATA_COLLECTED\][\s\S]*?\[\/B2B_DATA_COLLECTED\]/g, '')
     .replace(/\[REFERRAL_DATA_COLLECTED\][\s\S]*?\[\/REFERRAL_DATA_COLLECTED\]/g, '')
     .trim();
@@ -476,7 +494,7 @@ serve(async (req) => {
     // Verify conversation exists and get user_id + form tracking state
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('user_id, offers_shown, detected_persona, referral_pending, referral_completed, b2b_pending, b2b_completed')
+      .select('user_id, offers_shown, detected_persona, referral_pending, referral_completed, b2b_pending, b2b_completed, transcript_offered, transcript_emailed')
       .eq('id', conversation_id)
       .maybeSingle();
 
@@ -594,6 +612,8 @@ serve(async (req) => {
     let referralCompleted = conversation?.referral_completed || false;
     let b2bPending = conversation?.b2b_pending || false;
     let b2bCompleted = conversation?.b2b_completed || false;
+    let transcriptOffered = conversation?.transcript_offered || false;
+    let transcriptEmailed = conversation?.transcript_emailed || false;
     
     offersShown = conversation?.offers_shown || [];
     detectedPersona = conversation?.detected_persona || null;
@@ -1038,6 +1058,46 @@ MARKER RULES:
       }
     }
 
+    // ========== TRANSCRIPT OFFER DETECTION ==========
+    const lowerQuestion = trimmedQuestion.toLowerCase();
+    const totalMessages = fullConversationHistory.length + 1; // +1 for current response
+    
+    // Check if user said yes to transcript offer
+    if (transcriptOffered && !transcriptEmailed && conversation?.user_id) {
+      const wantsTranscript = TRANSCRIPT_YES_PHRASES.some(phrase => lowerQuestion.includes(phrase));
+      
+      if (wantsTranscript) {
+        console.log('User wants transcript, sending email...');
+        
+        // Call send-transcript edge function
+        const { error: transcriptError } = await supabase.functions.invoke('send-transcript', {
+          body: {
+            conversation_id: conversation_id,
+            user_email: userData?.email,
+            user_name: userData?.name || user_context?.name || 'there'
+          }
+        });
+        
+        if (!transcriptError) {
+          transcriptEmailed = true;
+          assistantResponse += `\n\nDone! I've sent a copy to ${userData?.email}. Anything else I can help with?`;
+        } else {
+          console.error('Error sending transcript:', transcriptError);
+        }
+      }
+    }
+    
+    // Offer transcript when: 10+ messages AND closing phrase detected AND not already offered
+    if (totalMessages >= 10 && !transcriptOffered && !transcriptEmailed) {
+      const isClosingPhrase = CLOSING_PHRASES.some(phrase => lowerQuestion.includes(phrase));
+      
+      if (isClosingPhrase) {
+        console.log('Closing phrase detected, offering transcript');
+        assistantResponse += "\n\nGlad I could help! Would you like me to email you a copy of this conversation for your records?";
+        transcriptOffered = true;
+      }
+    }
+
     // Save messages to database
     if (conversation_id) {
       console.log('Saving messages to database...')
@@ -1062,7 +1122,9 @@ MARKER RULES:
           referral_pending: referralPending,
           referral_completed: referralCompleted,
           b2b_pending: b2bPending,
-          b2b_completed: b2bCompleted
+          b2b_completed: b2bCompleted,
+          transcript_offered: transcriptOffered,
+          transcript_emailed: transcriptEmailed
         })
         .eq('id', conversation_id);
     }

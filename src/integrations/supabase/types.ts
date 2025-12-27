@@ -81,6 +81,9 @@ export type Database = {
           offers_shown: string[] | null
           referral_completed: boolean | null
           referral_pending: boolean | null
+          transcript_emailed: boolean | null
+          transcript_emailed_at: string | null
+          transcript_offered: boolean | null
           user_id: string | null
         }
         Insert: {
@@ -92,6 +95,9 @@ export type Database = {
           offers_shown?: string[] | null
           referral_completed?: boolean | null
           referral_pending?: boolean | null
+          transcript_emailed?: boolean | null
+          transcript_emailed_at?: string | null
+          transcript_offered?: boolean | null
           user_id?: string | null
         }
         Update: {
@@ -103,6 +109,9 @@ export type Database = {
           offers_shown?: string[] | null
           referral_completed?: boolean | null
           referral_pending?: boolean | null
+          transcript_emailed?: boolean | null
+          transcript_emailed_at?: string | null
+          transcript_offered?: boolean | null
           user_id?: string | null
         }
         Relationships: [
