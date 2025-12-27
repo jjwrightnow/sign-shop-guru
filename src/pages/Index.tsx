@@ -45,6 +45,8 @@ const Index = () => {
   const [messageCount, setMessageCount] = useState(0);
   const [showTrainMe, setShowTrainMe] = useState(false);
   const [isTrained, setIsTrained] = useState(false);
+  const [transcriptSending, setTranscriptSending] = useState(false);
+  const [transcriptAlreadySent, setTranscriptAlreadySent] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -230,6 +232,7 @@ const Index = () => {
 
     setUserData({ ...userData, conversationId });
     setShowOptIn(false);
+    setTranscriptAlreadySent(false);
     await loadConversationMessages(conversationId, userData.name);
   };
 
@@ -251,6 +254,7 @@ const Index = () => {
       setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
       setMessageCount(0);
       setShowOptIn(false);
+      setTranscriptAlreadySent(false);
 
       // Refresh conversations list
       await loadUserConversations(userData.userId);
@@ -378,9 +382,57 @@ const Index = () => {
     setUserData(null);
     setMessages([]);
     setConversations([]);
+    setTranscriptAlreadySent(false);
     toast({
       description: "Done. You'll see the signup form next time.",
     });
+  };
+
+  const handleEmailTranscript = async () => {
+    if (!userData || transcriptSending) return;
+    
+    if (transcriptAlreadySent) {
+      toast({
+        description: `Already sent to ${userData.email}`,
+      });
+      return;
+    }
+
+    setTranscriptSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-transcript", {
+        body: {
+          conversation_id: userData.conversationId,
+          user_email: userData.email,
+          user_name: userData.name,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.alreadySent) {
+        setTranscriptAlreadySent(true);
+        toast({
+          description: `Already sent to ${userData.email}`,
+        });
+      } else if (data?.success) {
+        setTranscriptAlreadySent(true);
+        toast({
+          description: `Sent! Check your inbox at ${userData.email}`,
+        });
+      } else {
+        throw new Error(data?.error || "Failed to send transcript");
+      }
+    } catch (error: any) {
+      console.error("Error sending transcript:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send transcript. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setTranscriptSending(false);
+    }
   };
 
   // Check if user is a sign professional (not a shopper)
@@ -419,6 +471,10 @@ const Index = () => {
           onTrainMeClick={isSignProfessional ? handleTrainMeClick : undefined}
           isTrained={isTrained}
           onForgetMe={userData ? handleForgetMe : undefined}
+          onEmailTranscript={userData && messages.length > 2 ? handleEmailTranscript : undefined}
+          transcriptSending={transcriptSending}
+          transcriptAlreadySent={transcriptAlreadySent}
+          userEmail={userData?.email}
         />
         
         <main className="flex-1 overflow-y-auto">

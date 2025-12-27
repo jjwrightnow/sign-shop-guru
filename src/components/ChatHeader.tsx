@@ -1,13 +1,25 @@
-import { Zap, GraduationCap } from "lucide-react";
+import { Zap, GraduationCap, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatHeaderProps {
   onTrainMeClick?: () => void;
   isTrained?: boolean;
   onForgetMe?: () => void;
+  onEmailTranscript?: () => void;
+  transcriptSending?: boolean;
+  transcriptAlreadySent?: boolean;
+  userEmail?: string;
 }
 
-const ChatHeader = ({ onTrainMeClick, isTrained, onForgetMe }: ChatHeaderProps) => {
+const ChatHeader = ({ 
+  onTrainMeClick, 
+  isTrained, 
+  onForgetMe, 
+  onEmailTranscript,
+  transcriptSending,
+  transcriptAlreadySent,
+  userEmail
+}: ChatHeaderProps) => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
       <div className="container flex h-16 items-center justify-between px-4">
@@ -29,6 +41,19 @@ const ChatHeader = ({ onTrainMeClick, isTrained, onForgetMe }: ChatHeaderProps) 
         </div>
 
         <div className="flex items-center gap-2">
+          {onEmailTranscript && (
+            <button
+              onClick={onEmailTranscript}
+              disabled={transcriptSending}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+              title={transcriptAlreadySent ? `Already sent to ${userEmail}` : "Email this chat"}
+            >
+              <Mail className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">
+                {transcriptSending ? 'Sending...' : transcriptAlreadySent ? 'Sent!' : 'Email this chat'}
+              </span>
+            </button>
+          )}
           {onForgetMe && (
             <button
               onClick={onForgetMe}
