@@ -52,6 +52,7 @@ function extractReferralData(messages: { role: string; content: string }[]): {
   project_type?: string;
   timeline?: string;
   phone?: string;
+  email?: string;
   best_time_to_call?: string;
   notes?: string;
 } {
@@ -72,6 +73,10 @@ function extractReferralData(messages: { role: string; content: string }[]): {
       break;
     }
   }
+  
+  // Email pattern (check first as preferred contact method)
+  const emailMatch = allUserText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailMatch) data.email = emailMatch[1];
   
   // Phone pattern
   const phoneMatch = allUserText.match(/(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/);
@@ -653,8 +658,10 @@ ${referralPending ? '- Referral form is IN PROGRESS - continue collecting their 
 
 REFERRAL COLLECTION (when user says YES or asks for a recommendation):
 1. Include [REFERRAL_FORM] marker and ask:
-   "I'd be happy to connect you! Quick questions: What city/state? What type of sign? Timeline? Phone number? Best time to call?"
-2. After they provide info, include [REFERRAL_SUBMIT] marker and confirm:
+   "I'd be happy to connect you! Quick questions: What city/state? What type of sign? Timeline? And what's the best way to reach you - email or phone?"
+2. IMPORTANT: Ask for EMAIL FIRST as the preferred contact method. Only ask for phone if they prefer phone contact.
+3. If they provide email, that's sufficient. If they prefer phone, ask: "What's your phone number and best time to call?"
+4. After they provide contact info (email OR phone), include [REFERRAL_SUBMIT] marker and confirm:
    "Perfect! A sign professional will reach out within 1 business day."
 ` : '';
 
@@ -748,7 +755,11 @@ MARKER RULES:
       const referralData = extractReferralData(fullConversationHistory);
       console.log('Extracted referral data:', referralData);
       
-      // Save to referrals table
+      // Save to referrals table (include email in notes if provided separately)
+      const notesWithEmail = referralData.email && referralData.email !== userData?.email 
+        ? `Contact email: ${referralData.email}\n${referralData.notes || ''}`
+        : referralData.notes || null;
+      
       const referralRecord = {
         user_id: conversation.user_id,
         conversation_id: conversation_id,
@@ -758,7 +769,7 @@ MARKER RULES:
         timeline: referralData.timeline || null,
         phone: referralData.phone || userData?.phone || null,
         best_time_to_call: referralData.best_time_to_call || null,
-        notes: referralData.notes || null,
+        notes: notesWithEmail,
         status: 'new'
       };
       
@@ -772,6 +783,11 @@ MARKER RULES:
         console.log('Referral saved successfully');
         referralCompleted = true;
         referralPending = false;
+        
+        // Determine best contact info to display
+        const contactEmail = referralData.email || userData?.email || 'Not provided';
+        const contactPhone = referralData.phone || userData?.phone || null;
+        const preferredContact = referralData.email ? 'Email' : (contactPhone ? 'Phone' : 'Email');
         
         // Send email notification to ask@signmaker.ai
         const timestamp = new Date().toISOString();
@@ -789,11 +805,21 @@ MARKER RULES:
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
-                <td style="padding: 8px 0;">${userData?.email || 'Not provided'}</td>
+                <td style="padding: 8px 0;">${contactEmail}</td>
               </tr>
+              ${contactPhone ? `
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
-                <td style="padding: 8px 0;">${referralData.phone || userData?.phone || 'Not provided'}</td>
+                <td style="padding: 8px 0;">${contactPhone}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
+                <td style="padding: 8px 0;">${referralData.best_time_to_call || 'Not provided'}</td>
+              </tr>
+              ` : ''}
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Preferred Contact:</td>
+                <td style="padding: 8px 0;"><strong>${preferredContact}</strong></td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Location:</td>
@@ -806,10 +832,6 @@ MARKER RULES:
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Timeline:</td>
                 <td style="padding: 8px 0;">${referralData.timeline || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
-                <td style="padding: 8px 0;">${referralData.best_time_to_call || 'Not provided'}</td>
               </tr>
             </table>
             
