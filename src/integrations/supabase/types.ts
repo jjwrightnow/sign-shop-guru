@@ -92,6 +92,42 @@ export type Database = {
           },
         ]
       }
+      conversation_patterns: {
+        Row: {
+          conversion_rate: number | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          pattern_type: string
+          successful_path: string[] | null
+          trigger_phrase: string | null
+          updated_at: string | null
+          usage_count: number | null
+        }
+        Insert: {
+          conversion_rate?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pattern_type: string
+          successful_path?: string[] | null
+          trigger_phrase?: string | null
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Update: {
+          conversion_rate?: number | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          pattern_type?: string
+          successful_path?: string[] | null
+          trigger_phrase?: string | null
+          updated_at?: string | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       conversations: {
         Row: {
           b2b_completed: boolean | null
@@ -176,6 +212,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      knowledge_gaps: {
+        Row: {
+          created_at: string | null
+          frequency: number | null
+          id: string
+          question: string
+          resolution: string | null
+          resolved: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          frequency?: number | null
+          id?: string
+          question: string
+          resolution?: string | null
+          resolved?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          frequency?: number | null
+          id?: string
+          question?: string
+          resolution?: string | null
+          resolved?: boolean | null
+        }
+        Relationships: []
       }
       messages: {
         Row: {
@@ -398,6 +461,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      suggested_followups: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          followup_questions: string[] | null
+          id: string
+          is_active: boolean | null
+          success_rate: number | null
+          trigger_keywords: string[] | null
+          usage_count: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          followup_questions?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          success_rate?: number | null
+          trigger_keywords?: string[] | null
+          usage_count?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          followup_questions?: string[] | null
+          id?: string
+          is_active?: boolean | null
+          success_rate?: number | null
+          trigger_keywords?: string[] | null
+          usage_count?: number | null
+        }
+        Relationships: []
       }
       usage_stats: {
         Row: {
