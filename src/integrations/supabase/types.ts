@@ -303,6 +303,51 @@ export type Database = {
         }
         Relationships: []
       }
+      signexperts_referrals: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          id: string
+          referral_context: string | null
+          referral_type: string
+          user_id: string | null
+          user_response: string | null
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          referral_context?: string | null
+          referral_type?: string
+          user_id?: string | null
+          user_response?: string | null
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          referral_context?: string | null
+          referral_type?: string
+          user_id?: string | null
+          user_response?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signexperts_referrals_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signexperts_referrals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           business_name: string | null

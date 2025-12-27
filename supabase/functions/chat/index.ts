@@ -310,6 +310,22 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
 
     let assistantResponse = data.content[0].text
 
+    // Check if AI response contains SignExperts.ai referral
+    const containsSignExpertsReferral = assistantResponse.toLowerCase().includes('signexperts.ai') || 
+                                         assistantResponse.toLowerCase().includes('sign experts');
+    
+    // Log SignExperts.ai referral if detected in response for shopper users
+    if (isShopperUser && containsSignExpertsReferral && conversation_id) {
+      console.log('Logging SignExperts.ai referral for shopper user');
+      await supabase.from('signexperts_referrals').insert({
+        user_id: conversation?.user_id || null,
+        conversation_id: conversation_id,
+        referral_type: 'signexperts',
+        referral_context: question.substring(0, 500), // Store what they were asking about
+        user_response: 'pending' // Will be updated if they respond
+      });
+    }
+
     // Pattern detection after 3+ messages
     if (conversationMessages.length >= 3) {
       const patterns = detectPatterns(conversationMessages);
@@ -320,6 +336,18 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
       if (offer) {
         assistantResponse += offer.offer;
         offersShown = [...offersShown, offer.offerType];
+        
+        // Log shopper offer as a referral opportunity
+        if (offer.offerType === 'shopper' && conversation_id) {
+          console.log('Logging pattern-based shopper referral offer');
+          await supabase.from('signexperts_referrals').insert({
+            user_id: conversation?.user_id || null,
+            conversation_id: conversation_id,
+            referral_type: 'pattern_detected',
+            referral_context: 'User showed shopper patterns: ' + question.substring(0, 300),
+            user_response: 'pending'
+          });
+        }
         
         // Determine detected persona based on highest pattern count
         const maxPattern = Math.max(patterns.shopper, patterns.owner, patterns.installer);
