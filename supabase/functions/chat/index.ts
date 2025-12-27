@@ -807,16 +807,7 @@ MARKER RULES:
       const referralData = extractReferralData(fullConversationHistory);
       console.log('Extracted referral data:', referralData);
       
-      // Save to referrals table with dedicated columns for email and timezone
-      const extraNotes: string[] = [];
-      if (referralData.preferred_contact) {
-        extraNotes.push(`Preferred contact: ${referralData.preferred_contact}`);
-      }
-      if (referralData.notes) {
-        extraNotes.push(referralData.notes);
-      }
-      const notesWithExtra = extraNotes.length > 0 ? extraNotes.join('\n') : null;
-      
+      // Save to referrals table with dedicated columns
       const referralRecord = {
         user_id: conversation.user_id,
         conversation_id: conversation_id,
@@ -827,8 +818,9 @@ MARKER RULES:
         phone: referralData.phone || userData?.phone || null,
         email: referralData.email || userData?.email || null,
         timezone: referralData.timezone || null,
+        preferred_contact: referralData.preferred_contact || null,
         best_time_to_call: referralData.best_time_to_call || null,
-        notes: notesWithExtra,
+        notes: referralData.notes || null,
         status: 'new'
       };
       
