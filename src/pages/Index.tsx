@@ -3,53 +3,32 @@ import ChatHeader from "@/components/ChatHeader";
 import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
+import IntakeFormModal from "@/components/IntakeFormModal";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   id: string;
   content: string;
   isUser: boolean;
+  dbId?: string;
 }
 
-const WELCOME_MESSAGE = `Hey there — I'm SignMaker.ai, here to help with signage and fabrication questions. Whether you're working on channel letters, monument signs, or just trying to figure out the right materials, I've got you covered.
-
-What would you like to know?`;
-
-const SAMPLE_RESPONSES: Record<string, string> = {
-  aluminum: `Most US shops use .040" aluminum for channel letter returns — it bends well and holds shape. For letters over 24", some go to .050" or .063" for extra rigidity.`,
-  led: `Common LED brands include SloanLED, Principal LED, and GE. Each has pros and cons depending on application and your distributor. What type of letters are you lighting?`,
-  channel: `Channel letters come in several styles: face-lit (most common), halo-lit (backlit glow), reverse/back-lit, open-face (exposed neon look), and combination. What style are you considering?`,
-  price: `Pricing varies a lot by market and overhead. Most shops start with per-inch pricing, then adjust for complexity — open-face vs standard, paint colors, installation. Your local competition matters more than any formula.`,
-  code: `I can't verify code compliance — that needs a licensed electrician and local AHJ sign-off. Generally, sign circuits should be dedicated, grounded, and use UL-listed components. What specific aspect are you trying to figure out?`,
-};
-
-const getResponse = (message: string): string => {
-  const lowerMessage = message.toLowerCase();
-  
-  if (lowerMessage.includes("aluminum") || lowerMessage.includes("thickness") || lowerMessage.includes("return")) {
-    return SAMPLE_RESPONSES.aluminum;
-  }
-  if (lowerMessage.includes("led") || lowerMessage.includes("light") || lowerMessage.includes("brand")) {
-    return SAMPLE_RESPONSES.led;
-  }
-  if (lowerMessage.includes("channel") || lowerMessage.includes("letter") || lowerMessage.includes("type")) {
-    return SAMPLE_RESPONSES.channel;
-  }
-  if (lowerMessage.includes("price") || lowerMessage.includes("cost") || lowerMessage.includes("charge")) {
-    return SAMPLE_RESPONSES.price;
-  }
-  if (lowerMessage.includes("code") || lowerMessage.includes("wiring") || lowerMessage.includes("electrical")) {
-    return SAMPLE_RESPONSES.code;
-  }
-  
-  return `That's a good question. In the sign industry, the answer often depends on specific project details. Could you tell me more about what you're working on? For example, the sign type, size, or location (indoor/outdoor) would help me give you better guidance.`;
-};
+interface UserData {
+  userId: string;
+  conversationId: string;
+  name: string;
+  experienceLevel: string;
+  intent: string;
+}
 
 const Index = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: "welcome", content: WELCOME_MESSAGE, isUser: false },
-  ]);
+  const { toast } = useToast();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [lastAssistantMessageId, setLastAssistantMessageId] = useState<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,7 +38,17 @@ const Index = () => {
     scrollToBottom();
   }, [messages, isTyping]);
 
+  const handleIntakeComplete = (data: UserData) => {
+    setUserData(data);
+    
+    // Set personalized welcome message
+    const welcomeMessage = `Hey ${data.name} — I help with signage and fabrication questions. What would you like to know?`;
+    setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+  };
+
   const handleSend = async (content: string) => {
+    if (!userData) return;
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       content,
@@ -69,21 +58,56 @@ const Index = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
-      const response = getResponse(content);
+    try {
+      const { data, error } = await supabase.functions.invoke("chat", {
+        body: {
+          question: content,
+          user_context: {
+            name: userData.name,
+            experience_level: userData.experienceLevel,
+            intent: userData.intent,
+          },
+          conversation_id: userData.conversationId,
+        },
+      });
+
+      if (error) throw error;
+
+      // Get the latest message ID from the database for feedback
+      const { data: messagesData } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", userData.conversationId)
+        .eq("role", "assistant")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const dbMessageId = messagesData?.[0]?.id;
+      setLastAssistantMessageId(dbMessageId || null);
+
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
-        content: response,
+        content: data.response,
         isUser: false,
+        dbId: dbMessageId,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error: any) {
+      console.error("Chat error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to get response. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000);
+    }
   };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
+      <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
+      
       <ChatHeader />
       
       <main className="flex-1 overflow-y-auto">
@@ -95,6 +119,7 @@ const Index = () => {
                 content={message.content}
                 isUser={message.isUser}
                 showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
+                messageId={message.dbId}
               />
             ))}
             {isTyping && <TypingIndicator />}
@@ -103,7 +128,7 @@ const Index = () => {
         </div>
       </main>
       
-      <ChatInput onSend={handleSend} disabled={isTyping} />
+      <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
     </div>
   );
 };
