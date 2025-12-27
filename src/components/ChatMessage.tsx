@@ -1,13 +1,40 @@
-import { ThumbsUp, ThumbsDown, Zap, User } from "lucide-react";
+import { useState } from "react";
+import { ThumbsUp, ThumbsDown, Zap, User, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatMessageProps {
   content: string;
   isUser: boolean;
   showFeedback?: boolean;
+  messageId?: string;
 }
 
-const ChatMessage = ({ content, isUser, showFeedback = false }: ChatMessageProps) => {
+const ChatMessage = ({ content, isUser, showFeedback = false, messageId }: ChatMessageProps) => {
+  const { toast } = useToast();
+  const [feedbackGiven, setFeedbackGiven] = useState<"helpful" | "not_helpful" | null>(null);
+
+  const handleFeedback = async (rating: "helpful" | "not_helpful") => {
+    if (feedbackGiven || !messageId) return;
+
+    try {
+      const { error } = await supabase.from("feedback").insert({
+        message_id: messageId,
+        rating,
+      });
+
+      if (error) throw error;
+
+      setFeedbackGiven(rating);
+      toast({
+        description: "Thanks for your feedback!",
+      });
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+    }
+  };
+
   return (
     <div className={cn("flex gap-3 w-full", isUser ? "justify-end" : "justify-start")}>
       {!isUser && (
@@ -26,12 +53,27 @@ const ChatMessage = ({ content, isUser, showFeedback = false }: ChatMessageProps
         
         {showFeedback && !isUser && (
           <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border/50">
-            <button className="p-1.5 rounded-md hover:bg-muted transition-colors group">
-              <ThumbsUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </button>
-            <button className="p-1.5 rounded-md hover:bg-muted transition-colors group">
-              <ThumbsDown className="w-4 h-4 text-muted-foreground group-hover:text-secondary transition-colors" />
-            </button>
+            {feedbackGiven ? (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Check className="w-3 h-3 text-primary" />
+                <span>Feedback submitted</span>
+              </div>
+            ) : (
+              <>
+                <button 
+                  onClick={() => handleFeedback("helpful")}
+                  className="p-1.5 rounded-md hover:bg-muted transition-colors group"
+                >
+                  <ThumbsUp className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                </button>
+                <button 
+                  onClick={() => handleFeedback("not_helpful")}
+                  className="p-1.5 rounded-md hover:bg-muted transition-colors group"
+                >
+                  <ThumbsDown className="w-4 h-4 text-muted-foreground group-hover:text-secondary transition-colors" />
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
