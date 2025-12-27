@@ -5,12 +5,14 @@ import {
   MessageSquare,
   ThumbsUp,
   ThumbsDown,
-  Settings,
   LogOut,
   ArrowLeft,
   Search,
   AlertCircle,
   Zap,
+  ShoppingBag,
+  Download,
+  Check,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -33,6 +36,7 @@ interface Stats {
   messagesToday: number;
   helpfulFeedback: number;
   notHelpfulFeedback: number;
+  totalLeads: number;
 }
 
 interface ConversationRow {
@@ -70,6 +74,19 @@ interface SettingRow {
   is_active: boolean;
 }
 
+interface LeadRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  business_name: string | null;
+  project_type: string | null;
+  timeline: string | null;
+  location: string | null;
+  created_at: string;
+  contacted: boolean;
+}
+
 const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
   const { toast } = useToast();
   const [stats, setStats] = useState<Stats>({
@@ -79,11 +96,13 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     messagesToday: 0,
     helpfulFeedback: 0,
     notHelpfulFeedback: 0,
+    totalLeads: 0,
   });
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [gaps, setGaps] = useState<GapRow[]>([]);
   const [settings, setSettings] = useState<SettingRow[]>([]);
+  const [leads, setLeads] = useState<LeadRow[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [feedbackFilter, setFeedbackFilter] = useState<"all" | "helpful" | "not_helpful">("all");
   const [expandedConversation, setExpandedConversation] = useState<string | null>(null);
@@ -101,17 +120,19 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
       fetchFeedback(),
       fetchGaps(),
       fetchSettings(),
+      fetchLeads(),
     ]);
     setIsLoading(false);
   };
 
   const fetchStats = async () => {
     try {
-      const [users, convos, messages, feedbackData] = await Promise.all([
+      const [users, convos, messages, feedbackData, leadsData] = await Promise.all([
         supabase.from("users").select("id", { count: "exact" }),
         supabase.from("conversations").select("id", { count: "exact" }),
         supabase.from("messages").select("id, created_at", { count: "exact" }),
         supabase.from("feedback").select("rating"),
+        supabase.from("users").select("id", { count: "exact" }).eq("intent", "shopping"),
       ]);
 
       const today = new Date();
@@ -131,6 +152,7 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
         messagesToday,
         helpfulFeedback: helpful,
         notHelpfulFeedback: notHelpful,
+        totalLeads: leadsData.count || 0,
       });
     } catch (error) {
       console.error("Error fetching stats:", error);
@@ -262,6 +284,21 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     }
   };
 
+  const fetchLeads = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, email, phone, business_name, project_type, timeline, location, created_at, contacted")
+        .eq("intent", "shopping")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setLeads((data || []).map(l => ({ ...l, contacted: l.contacted ?? false })));
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+    }
+  };
+
   const updateSetting = async (id: string, value: string, isActive: boolean) => {
     try {
       const { error } = await supabase
@@ -278,6 +315,45 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     }
   };
 
+  const toggleLeadContacted = async (leadId: string, contacted: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({ contacted })
+        .eq("id", leadId);
+
+      if (error) throw error;
+      setLeads(leads.map(l => l.id === leadId ? { ...l, contacted } : l));
+    } catch (error) {
+      console.error("Error updating lead:", error);
+      toast({ title: "Error", description: "Failed to update lead", variant: "destructive" });
+    }
+  };
+
+  const exportLeadsToCSV = () => {
+    const headers = ["Name", "Email", "Phone", "Business", "Project Type", "Timeline", "Location", "Date", "Contacted"];
+    const rows = leads.map(l => [
+      l.name,
+      l.email,
+      l.phone || "",
+      l.business_name || "",
+      l.project_type || "",
+      l.timeline || "",
+      l.location || "",
+      new Date(l.created_at).toLocaleDateString(),
+      l.contacted ? "Yes" : "No"
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `signmaker-leads-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filteredConversations = conversations.filter(
     (c) =>
       c.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -291,6 +367,29 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  const formatProjectType = (type: string | null) => {
+    if (!type) return "—";
+    const types: Record<string, string> = {
+      "channel-letters": "Channel Letters",
+      "monument": "Monument Sign",
+      "dimensional": "Dimensional Letters",
+      "led-neon": "LED / Neon",
+      "other": "Other",
+    };
+    return types[type] || type;
+  };
+
+  const formatTimeline = (timeline: string | null) => {
+    if (!timeline) return "—";
+    const timelines: Record<string, string> = {
+      "asap": "ASAP / Rush",
+      "2-4-weeks": "2-4 weeks",
+      "1-2-months": "1-2 months",
+      "researching": "Researching",
+    };
+    return timelines[timeline] || timeline;
   };
 
   return (
@@ -331,23 +430,91 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
         ) : (
           <>
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
               <StatCard icon={Users} label="Total Users" value={stats.totalUsers} />
               <StatCard icon={MessageSquare} label="Conversations" value={stats.totalConversations} />
               <StatCard icon={MessageSquare} label="Total Messages" value={stats.totalMessages} />
               <StatCard icon={MessageSquare} label="Messages Today" value={stats.messagesToday} accent />
               <StatCard icon={ThumbsUp} label="Helpful" value={stats.helpfulFeedback} />
               <StatCard icon={ThumbsDown} label="Not Helpful" value={stats.notHelpfulFeedback} />
+              <StatCard icon={ShoppingBag} label="Leads" value={stats.totalLeads} accent />
             </div>
 
             {/* Tabs */}
-            <Tabs defaultValue="conversations" className="space-y-4">
+            <Tabs defaultValue="leads" className="space-y-4">
               <TabsList className="bg-surface border border-border">
+                <TabsTrigger value="leads">Leads</TabsTrigger>
                 <TabsTrigger value="conversations">Conversations</TabsTrigger>
                 <TabsTrigger value="feedback">Feedback</TabsTrigger>
                 <TabsTrigger value="gaps">Gap Tracking</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
+
+              {/* Leads Tab */}
+              <TabsContent value="leads" className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-medium text-foreground">Sign Buyer Leads</h2>
+                  <Button onClick={exportLeadsToCSV} variant="outline" size="sm" className="gap-2">
+                    <Download className="w-4 h-4" />
+                    Export CSV
+                  </Button>
+                </div>
+
+                <ScrollArea className="h-[600px]">
+                  {leads.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      No leads yet. Leads appear when users select "Shopping — I need a sign made"
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {leads.map((lead) => (
+                        <div
+                          key={lead.id}
+                          className={`bg-card border rounded-lg p-4 ${
+                            !lead.contacted ? "border-primary/50 bg-primary/5" : "border-border"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-foreground">{lead.name}</span>
+                                {!lead.contacted && (
+                                  <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded-full">
+                                    New Lead
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground space-y-0.5">
+                                <p>{lead.email} {lead.phone && `• ${lead.phone}`}</p>
+                                {lead.business_name && <p>Business: {lead.business_name}</p>}
+                                <div className="flex gap-4 flex-wrap text-xs">
+                                  <span>Project: {formatProjectType(lead.project_type)}</span>
+                                  <span>Timeline: {formatTimeline(lead.timeline)}</span>
+                                  <span>Location: {lead.location || "—"}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right space-y-2">
+                              <p className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</p>
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id={`contacted-${lead.id}`}
+                                  checked={lead.contacted}
+                                  onCheckedChange={(checked) => toggleLeadContacted(lead.id, checked === true)}
+                                  className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                                />
+                                <Label htmlFor={`contacted-${lead.id}`} className="text-xs text-muted-foreground">
+                                  Contacted
+                                </Label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
 
               {/* Conversations Tab */}
               <TabsContent value="conversations" className="space-y-4">
@@ -474,22 +641,23 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
               {/* Gap Tracking Tab */}
               <TabsContent value="gaps" className="space-y-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm mb-4">
-                  <AlertCircle className="w-4 h-4" />
-                  <span>Responses containing uncertainty phrases that may indicate knowledge gaps</span>
+                <div className="flex items-center gap-2 p-3 bg-secondary/10 border border-secondary/20 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-secondary" />
+                  <p className="text-sm text-muted-foreground">
+                    Messages where the assistant indicated uncertainty or lack of information
+                  </p>
                 </div>
 
                 <ScrollArea className="h-[600px]">
                   <div className="space-y-3">
                     {gaps.map((gap) => (
                       <div key={gap.id} className="bg-card border border-border rounded-lg p-4">
-                        <p className="text-xs text-muted-foreground mb-2">{formatDate(gap.created_at)}</p>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-muted-foreground">{formatDate(gap.created_at)}</span>
+                        </div>
                         <p className="text-sm text-foreground">{gap.content}</p>
                       </div>
                     ))}
-                    {gaps.length === 0 && (
-                      <p className="text-center text-muted-foreground py-8">No knowledge gaps detected</p>
-                    )}
                   </div>
                 </ScrollArea>
               </TabsContent>
@@ -502,11 +670,9 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                       <div key={setting.id} className="bg-card border border-border rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
-                            <Settings className="w-4 h-4 text-muted-foreground" />
-                            <Label className="font-medium text-foreground">{setting.setting_name}</Label>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Active</span>
+                            <h3 className="font-medium text-foreground capitalize">
+                              {setting.setting_name.replace(/_/g, " ")}
+                            </h3>
                             <Switch
                               checked={setting.is_active}
                               onCheckedChange={(checked) =>
@@ -526,9 +692,9 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
                           className="bg-muted border-border min-h-[100px]"
                         />
                         <Button
-                          size="sm"
-                          className="mt-2 bg-primary text-primary-foreground"
                           onClick={() => updateSetting(setting.id, setting.setting_value, setting.is_active)}
+                          size="sm"
+                          className="mt-2 bg-primary"
                         >
                           Save Changes
                         </Button>
@@ -556,7 +722,7 @@ const StatCard = ({
   value: number;
   accent?: boolean;
 }) => (
-  <div className="bg-card border border-border rounded-lg p-4">
+  <div className={`bg-card border rounded-lg p-4 ${accent ? "border-primary/30" : "border-border"}`}>
     <div className="flex items-center gap-2 mb-2">
       <Icon className={`w-4 h-4 ${accent ? "text-primary" : "text-muted-foreground"}`} />
       <span className="text-xs text-muted-foreground">{label}</span>
