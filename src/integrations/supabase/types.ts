@@ -296,6 +296,30 @@ export type Database = {
           },
         ]
       }
+      image_search_cache: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          query: string
+          results: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          query: string
+          results?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          query?: string
+          results?: Json | null
+        }
+        Relationships: []
+      }
       insights_reports: {
         Row: {
           created_at: string | null
