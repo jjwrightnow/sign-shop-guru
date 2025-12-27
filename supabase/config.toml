@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.get-messages]
 verify_jwt = false
+
+[functions.get-conversations]
+verify_jwt = false
+
+[functions.get-user-by-email]
+verify_jwt = false

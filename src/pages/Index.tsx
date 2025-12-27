@@ -57,40 +57,42 @@ const Index = () => {
       const storedEmail = localStorage.getItem("signmaker_user_email");
       if (storedEmail) {
         try {
-          const { data: user, error } = await supabase
-            .from("users")
-            .select("*")
-            .eq("email", storedEmail)
-            .maybeSingle();
+          // Use edge function to check user - no direct table access
+          const { data: userData, error: userError } = await supabase.functions.invoke("get-user-by-email", {
+            body: { email: storedEmail },
+          });
 
-          if (user && !error) {
-            // Check if user already has phone (already opted in)
-            if (user.phone) {
-              setOptInDismissed(true);
-            }
+          if (userError || !userData?.user) {
+            console.log("Could not verify returning user, starting fresh");
+            return;
+          }
 
-            // Get latest conversation
-            const { data: latestConvo } = await supabase
-              .from("conversations")
-              .select("id")
-              .eq("user_id", user.id)
-              .order("created_at", { ascending: false })
-              .limit(1)
-              .maybeSingle();
+          const user = userData.user;
+          
+          // Check if user already has phone (already opted in)
+          if (user.phone) {
+            setOptInDismissed(true);
+          }
 
-            if (latestConvo) {
-              setUserData({
-                userId: user.id,
-                conversationId: latestConvo.id,
-                name: user.name,
-                experienceLevel: user.experience_level,
-                intent: user.intent,
-              });
-              
-              // Load messages for this conversation
-              await loadConversationMessages(latestConvo.id, user.name);
-              await loadUserConversations(user.id);
-            }
+          // Get latest conversation via edge function
+          const { data: convoData } = await supabase.functions.invoke("get-conversations", {
+            body: { user_id: user.id },
+          });
+
+          const latestConvo = convoData?.conversations?.[0];
+
+          if (latestConvo) {
+            setUserData({
+              userId: user.id,
+              conversationId: latestConvo.id,
+              name: user.name,
+              experienceLevel: user.experience_level,
+              intent: user.intent,
+            });
+            
+            // Load messages for this conversation
+            await loadConversationMessages(latestConvo.id, user.name);
+            await loadUserConversations(user.id);
           }
         } catch (error) {
           console.error("Error checking returning user:", error);
@@ -112,27 +114,28 @@ const Index = () => {
   const loadUserConversations = async (userId: string) => {
     setIsLoadingConversations(true);
     try {
-      const { data: convos, error } = await supabase
-        .from("conversations")
-        .select("id, created_at")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+      // Use edge function to get conversations securely
+      const { data, error } = await supabase.functions.invoke("get-conversations", {
+        body: { user_id: userId },
+      });
 
       if (error) throw error;
 
+      const convos = data?.conversations || [];
+
       // Get first message for each conversation via edge function
       const conversationsWithPreview = await Promise.all(
-        (convos || []).map(async (conv) => {
+        convos.map(async (conv: { id: string; created_at: string }) => {
           try {
-            const { data } = await supabase.functions.invoke("get-messages", {
+            const { data: msgData } = await supabase.functions.invoke("get-messages", {
               body: { conversation_id: conv.id, user_id: userId },
             });
-            const userMessages = (data?.messages || []).filter((m: any) => m.role === "user");
+            const userMessages = (msgData?.messages || []).filter((m: any) => m.role === "user");
             return {
               id: conv.id,
               created_at: conv.created_at,
               first_message: userMessages[0]?.content || "",
-              message_count: data?.messages?.length || 0,
+              message_count: msgData?.messages?.length || 0,
             };
           } catch {
             return {
