@@ -859,6 +859,44 @@ MARKER RULES:
 - [B2B_SUBMIT] = user provided B2B info, submit it
 - Markers are stripped from responses automatically`
 
+    // ========== IMAGE SEARCH FOR VISUAL REQUESTS ==========
+    let imageContext = '';
+    const wantsVisuals = /show me|example|what does|look like|looks like|inspiration|ideas|pictures|images|photo|visual/i.test(trimmedQuestion);
+    
+    if (wantsVisuals) {
+      console.log('User wants visual examples, searching for images...');
+      
+      // Extract topic from question (remove common phrases)
+      const topic = trimmedQuestion
+        .replace(/show me|example of|what does|look like|looks like|pictures of|images of|photos of|can you show|I want to see/gi, '')
+        .trim();
+      
+      try {
+        // Search for images via edge function
+        const imageResponse = await fetch(`${supabaseUrl}/functions/v1/search-images`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`
+          },
+          body: JSON.stringify({ query: topic, count: 2 })
+        });
+        
+        const imageData = await imageResponse.json();
+        const imageResults = imageData.images || [];
+        
+        if (imageResults.length > 0) {
+          console.log('Found', imageResults.length, 'images for topic:', topic);
+          imageContext = `\n\nIMAGES FOUND (Creative Commons licensed, safe to share):\n${imageResults.map((img: any) => `- ${img.title}: ${img.url} (source: ${img.source})`).join('\n')}\n\nInclude ONE relevant image naturally in your response using format:\n[See example](IMAGE_URL)\n*Source: source_domain*`;
+        } else {
+          console.log('No images found for topic:', topic);
+        }
+      } catch (imgError) {
+        console.error('Image search error:', imgError);
+        // Continue without images
+      }
+    }
+
     console.log('Calling Claude API...')
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -871,7 +909,7 @@ MARKER RULES:
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
-        system: contextualPrompt,
+        system: contextualPrompt + imageContext,
         messages: [{ role: 'user', content: trimmedQuestion }]
       })
     })

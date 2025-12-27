@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.send-alert]
 verify_jwt = false
+
+[functions.search-images]
+verify_jwt = false
