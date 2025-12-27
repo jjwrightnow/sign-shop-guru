@@ -55,6 +55,7 @@ interface IntakeFormModalProps {
     name: string;
     experienceLevel: string;
     intent: string;
+    email: string;
   }) => void;
 }
 
@@ -138,6 +139,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
         name: formData.name,
         experienceLevel: formData.experienceLevel,
         intent: formData.intent,
+        email: formData.email,
       });
     } catch (error: any) {
       console.error("Error creating user:", error);
