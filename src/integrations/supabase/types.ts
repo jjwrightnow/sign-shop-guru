@@ -348,6 +348,42 @@ export type Database = {
           },
         ]
       }
+      usage_stats: {
+        Row: {
+          created_at: string
+          date: string
+          estimated_cost_cents: number | null
+          id: string
+          total_api_calls: number | null
+          total_blocked_limit: number | null
+          total_blocked_spam: number | null
+          total_off_topic: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          estimated_cost_cents?: number | null
+          id?: string
+          total_api_calls?: number | null
+          total_blocked_limit?: number | null
+          total_blocked_spam?: number | null
+          total_off_topic?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          estimated_cost_cents?: number | null
+          id?: string
+          total_api_calls?: number | null
+          total_blocked_limit?: number | null
+          total_blocked_spam?: number | null
+          total_off_topic?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           business_name: string | null
@@ -357,10 +393,16 @@ export type Database = {
           experience_level: string
           id: string
           intent: string
+          last_message_at: string | null
+          last_message_date: string | null
           location: string | null
+          messages_today: number | null
           name: string
+          off_topic_count: number | null
           phone: string | null
           project_type: string | null
+          spam_flags: number | null
+          tier: string | null
           timeline: string | null
           tos_accepted: boolean | null
         }
@@ -372,10 +414,16 @@ export type Database = {
           experience_level: string
           id?: string
           intent: string
+          last_message_at?: string | null
+          last_message_date?: string | null
           location?: string | null
+          messages_today?: number | null
           name: string
+          off_topic_count?: number | null
           phone?: string | null
           project_type?: string | null
+          spam_flags?: number | null
+          tier?: string | null
           timeline?: string | null
           tos_accepted?: boolean | null
         }
@@ -387,10 +435,16 @@ export type Database = {
           experience_level?: string
           id?: string
           intent?: string
+          last_message_at?: string | null
+          last_message_date?: string | null
           location?: string | null
+          messages_today?: number | null
           name?: string
+          off_topic_count?: number | null
           phone?: string | null
           project_type?: string | null
+          spam_flags?: number | null
+          tier?: string | null
           timeline?: string | null
           tos_accepted?: boolean | null
         }
