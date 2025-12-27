@@ -16,6 +16,8 @@ import {
   Handshake,
   Plus,
   GraduationCap,
+  Mail,
+  MailCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -67,6 +69,9 @@ interface ConversationRow {
   message_count: number;
   last_message: string;
   messages?: any[];
+  transcript_offered: boolean;
+  transcript_emailed: boolean;
+  transcript_emailed_at: string | null;
 }
 
 interface FeedbackRow {
@@ -263,6 +268,9 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
           message_count: convMessages.length,
           last_message: convMessages[convMessages.length - 1]?.content || "",
           messages: convMessages,
+          transcript_offered: conv.transcript_offered || false,
+          transcript_emailed: conv.transcript_emailed || false,
+          transcript_emailed_at: conv.transcript_emailed_at || null,
         };
       });
       setConversations(conversationsWithMessages);
@@ -1117,12 +1125,24 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-medium text-foreground">{conv.user_name}</span>
                                 <span className="text-xs text-muted-foreground">{conv.user_email}</span>
                                 <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded-full">
                                   {conv.experience_level}
                                 </span>
+                                {conv.transcript_emailed && (
+                                  <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">
+                                    <MailCheck className="w-3 h-3" />
+                                    Emailed
+                                  </span>
+                                )}
+                                {!conv.transcript_emailed && conv.transcript_offered && (
+                                  <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full">
+                                    <Mail className="w-3 h-3" />
+                                    Offered
+                                  </span>
+                                )}
                               </div>
                               <p className="text-sm text-muted-foreground mt-1 truncate">
                                 {conv.last_message || "No messages"}
@@ -1131,6 +1151,11 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                             <div className="text-right">
                               <p className="text-xs text-muted-foreground">{formatDate(conv.created_at)}</p>
                               <p className="text-xs text-primary">{conv.message_count} messages</p>
+                              {conv.transcript_emailed_at && (
+                                <p className="text-xs text-green-400">
+                                  Sent {formatDate(conv.transcript_emailed_at)}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </button>
