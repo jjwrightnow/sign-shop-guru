@@ -226,6 +226,7 @@ export type Database = {
           best_time_to_call: string | null
           conversation_id: string | null
           created_at: string | null
+          email: string | null
           id: string
           location_city: string | null
           location_state: string | null
@@ -235,12 +236,14 @@ export type Database = {
           project_type: string | null
           status: string | null
           timeline: string | null
+          timezone: string | null
           user_id: string | null
         }
         Insert: {
           best_time_to_call?: string | null
           conversation_id?: string | null
           created_at?: string | null
+          email?: string | null
           id?: string
           location_city?: string | null
           location_state?: string | null
@@ -250,12 +253,14 @@ export type Database = {
           project_type?: string | null
           status?: string | null
           timeline?: string | null
+          timezone?: string | null
           user_id?: string | null
         }
         Update: {
           best_time_to_call?: string | null
           conversation_id?: string | null
           created_at?: string | null
+          email?: string | null
           id?: string
           location_city?: string | null
           location_state?: string | null
@@ -265,6 +270,7 @@ export type Database = {
           project_type?: string | null
           status?: string | null
           timeline?: string | null
+          timezone?: string | null
           user_id?: string | null
         }
         Relationships: [
