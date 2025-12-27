@@ -307,18 +307,18 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
             </div>
           )}
 
-          <div className="flex items-start space-x-2 pt-2">
+          <div className="flex items-start space-x-3 pt-2">
             <Checkbox
               id="tos"
               checked={formData.tosAccepted}
               onCheckedChange={(checked) =>
                 setFormData({ ...formData, tosAccepted: checked === true })
               }
-              className="mt-0.5 border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+              className="mt-0.5"
             />
-            <Label htmlFor="tos" className="text-sm text-muted-foreground leading-tight">
+            <Label htmlFor="tos" className="text-sm text-[#f5f5f5] leading-tight cursor-pointer">
               I agree to the{" "}
-              <Link to="/terms" className="text-primary hover:underline" target="_blank">
+              <Link to="/terms" className="text-[#00d4ff] hover:underline" target="_blank">
                 Terms of Service
               </Link>
             </Label>
