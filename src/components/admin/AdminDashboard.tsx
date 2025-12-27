@@ -15,6 +15,7 @@ import {
   Building2,
   Handshake,
   Plus,
+  GraduationCap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -147,6 +148,16 @@ interface Referral {
   partner_name?: string;
 }
 
+interface TrainingStats {
+  users_trained: number;
+  users_trained_ids: string[];
+  equipment_counts: Record<string, number>;
+  material_counts: Record<string, number>;
+  product_counts: Record<string, number>;
+  custom_instructions_count: number;
+  custom_instructions_samples: string[];
+}
+
 const B2B_STATUSES = ['new', 'contacted', 'demo_scheduled', 'closed_won', 'closed_lost'];
 const REFERRAL_STATUSES = ['new', 'referred', 'contacted', 'quoted', 'won', 'lost'];
 
@@ -179,6 +190,16 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
     company_name: "",
     is_active: true,
   });
+  const [trainingStats, setTrainingStats] = useState<TrainingStats>({
+    users_trained: 0,
+    users_trained_ids: [],
+    equipment_counts: {},
+    material_counts: {},
+    product_counts: {},
+    custom_instructions_count: 0,
+    custom_instructions_samples: [],
+  });
+  const [trainedUsers, setTrainedUsers] = useState<{ id: string; name: string; email: string }[]>([]);
 
   useEffect(() => {
     fetchAllData();
@@ -298,6 +319,16 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
         };
       });
       setReferrals(referralsWithDetails);
+
+      // Set training stats
+      if (data.training_stats) {
+        setTrainingStats(data.training_stats);
+        // Map trained user IDs to user details
+        const trainedUserDetails = users
+          .filter((u: any) => data.training_stats.users_trained_ids.includes(u.id))
+          .map((u: any) => ({ id: u.id, name: u.name, email: u.email }));
+        setTrainedUsers(trainedUserDetails);
+      }
     } catch (error) {
       console.error("Error fetching admin data:", error);
       toast({ title: "Error", description: "Failed to load admin data", variant: "destructive" });
@@ -566,6 +597,7 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                 <TabsTrigger value="b2b">B2B Inquiries</TabsTrigger>
                 <TabsTrigger value="referrals">Referrals</TabsTrigger>
                 <TabsTrigger value="partners">Partners</TabsTrigger>
+                <TabsTrigger value="training">Training Stats</TabsTrigger>
                 <TabsTrigger value="conversations">Conversations</TabsTrigger>
                 <TabsTrigger value="feedback">Feedback</TabsTrigger>
                 <TabsTrigger value="gaps">Gap Tracking</TabsTrigger>
@@ -907,6 +939,138 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                     </div>
                   )}
                 </ScrollArea>
+              </TabsContent>
+
+              {/* Training Stats Tab */}
+              <TabsContent value="training" className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-primary" />
+                  <h2 className="text-lg font-medium text-foreground">Training Stats</h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className="w-4 h-4 text-primary" />
+                      <span className="text-sm text-muted-foreground">Users Trained</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">{trainingStats.users_trained}</span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      <span className="text-sm text-muted-foreground">Custom Instructions</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">{trainingStats.custom_instructions_count}</span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Zap className="w-4 h-4 text-primary" />
+                      <span className="text-sm text-muted-foreground">Equipment Types Selected</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">{Object.keys(trainingStats.equipment_counts).length}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Trained Users List */}
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3">Users Who Trained Their Bot</h3>
+                    <ScrollArea className="h-[200px]">
+                      {trainedUsers.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No users have trained their bot yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {trainedUsers.map((user) => (
+                            <div key={user.id} className="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+                              <span className="text-foreground">{user.name}</span>
+                              <span className="text-muted-foreground text-xs">{user.email}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+
+                  {/* Equipment Stats */}
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3">Most Common Equipment</h3>
+                    <ScrollArea className="h-[200px]">
+                      {Object.keys(trainingStats.equipment_counts).length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No equipment selected yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {Object.entries(trainingStats.equipment_counts)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([key, count]) => (
+                              <div key={key} className="flex items-center justify-between text-sm">
+                                <span className="text-foreground capitalize">{key.replace(/_/g, ' ')}</span>
+                                <span className="text-primary font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+
+                  {/* Materials Stats */}
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3">Most Common Materials</h3>
+                    <ScrollArea className="h-[200px]">
+                      {Object.keys(trainingStats.material_counts).length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No materials selected yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {Object.entries(trainingStats.material_counts)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([key, count]) => (
+                              <div key={key} className="flex items-center justify-between text-sm">
+                                <span className="text-foreground capitalize">{key.replace(/_/g, ' ')}</span>
+                                <span className="text-primary font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+
+                  {/* Products Stats */}
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3">Most Common Products</h3>
+                    <ScrollArea className="h-[200px]">
+                      {Object.keys(trainingStats.product_counts).length === 0 ? (
+                        <p className="text-muted-foreground text-sm">No products selected yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {Object.entries(trainingStats.product_counts)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([key, count]) => (
+                              <div key={key} className="flex items-center justify-between text-sm">
+                                <span className="text-foreground capitalize">{key.replace(/_/g, ' ')}</span>
+                                <span className="text-primary font-medium">{count}</span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </div>
+                </div>
+
+                {/* Custom Instructions Samples */}
+                {trainingStats.custom_instructions_samples.length > 0 && (
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-foreground mb-3">Custom Instructions (Anonymized Themes)</h3>
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-3">
+                        {trainingStats.custom_instructions_samples.map((instruction, i) => (
+                          <div key={i} className="text-sm text-muted-foreground p-2 bg-muted rounded border border-border">
+                            "{instruction}"
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
               </TabsContent>
 
               {/* Conversations Tab */}

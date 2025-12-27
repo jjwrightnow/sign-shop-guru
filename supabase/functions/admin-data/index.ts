@@ -39,7 +39,8 @@ serve(async (req) => {
         partnersResult,
         referralsResult,
         signexpertsReferralsResult,
-        usageStatsResult
+        usageStatsResult,
+        userContextResult
       ] = await Promise.all([
         supabase.from('users').select('*').order('created_at', { ascending: false }),
         supabase.from('conversations').select('*').order('created_at', { ascending: false }),
@@ -50,8 +51,36 @@ serve(async (req) => {
         supabase.from('partners').select('*').order('created_at', { ascending: false }),
         supabase.from('referrals').select('*').order('created_at', { ascending: false }),
         supabase.from('signexperts_referrals').select('*').order('created_at', { ascending: false }),
-        supabase.from('usage_stats').select('*').order('date', { ascending: false }).limit(30)
+        supabase.from('usage_stats').select('*').order('date', { ascending: false }).limit(30),
+        supabase.from('user_context').select('*').eq('is_active', true)
       ])
+
+      // Calculate training stats
+      const allContext = userContextResult.data || [];
+      const usersWithContext = [...new Set(allContext.map((c: any) => c.user_id))];
+      
+      // Count equipment selections
+      const equipmentCounts: Record<string, number> = {};
+      const materialCounts: Record<string, number> = {};
+      const productCounts: Record<string, number> = {};
+      
+      allContext.forEach((c: any) => {
+        if (c.context_type === 'equipment' && c.context_value === 'true') {
+          equipmentCounts[c.context_key] = (equipmentCounts[c.context_key] || 0) + 1;
+        }
+        if (c.context_type === 'materials' && c.context_value === 'true') {
+          materialCounts[c.context_key] = (materialCounts[c.context_key] || 0) + 1;
+        }
+        if (c.context_type === 'products' && c.context_value === 'true') {
+          productCounts[c.context_key] = (productCounts[c.context_key] || 0) + 1;
+        }
+      });
+      
+      // Get custom instructions (anonymized themes)
+      const customInstructions = allContext
+        .filter((c: any) => c.context_type === 'preferences' && c.context_key === 'custom_instructions')
+        .map((c: any) => c.context_value)
+        .filter((v: string) => v && v.length > 0);
 
       // Calculate users hitting daily limits
       const usersHittingLimits = (usersResult.data || []).filter(
@@ -75,6 +104,7 @@ serve(async (req) => {
           referrals: referralsResult.data || [],
           signexperts_referrals: signexpertsReferralsResult.data || [],
           usage_stats: usageStatsResult.data || [],
+          user_context: allContext,
           admin_stats: {
             users_hitting_limits: usersHittingLimits.length,
             users_hitting_limits_list: usersHittingLimits.map((u: any) => ({ id: u.id, name: u.name, email: u.email })),
@@ -87,6 +117,15 @@ serve(async (req) => {
               off_topic_count: u.off_topic_count 
             })),
             today_stats: (usageStatsResult.data || [])[0] || null
+          },
+          training_stats: {
+            users_trained: usersWithContext.length,
+            users_trained_ids: usersWithContext,
+            equipment_counts: equipmentCounts,
+            material_counts: materialCounts,
+            product_counts: productCounts,
+            custom_instructions_count: customInstructions.length,
+            custom_instructions_samples: customInstructions.slice(0, 10)
           }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
