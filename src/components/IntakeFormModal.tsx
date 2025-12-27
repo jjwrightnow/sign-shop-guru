@@ -191,6 +191,9 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="bg-muted border-border focus:border-primary"
             />
+            <p className="text-xs text-muted-foreground">
+              Used to save your conversation. We won't contact you unless you ask us to.
+            </p>
             {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
 
@@ -301,17 +304,6 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-foreground">Phone (for quote follow-up)</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="(555) 123-4567"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="bg-muted border-border focus:border-primary"
-                />
-              </div>
             </div>
           )}
 
