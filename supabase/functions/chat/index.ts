@@ -7,10 +7,40 @@ const corsHeaders = {
 }
 
 // Rate limiting configuration
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;  // 1 minute
-const MAX_MESSAGES_PER_WINDOW = 10;  // 10 messages per minute per conversation
-const MIN_MESSAGE_INTERVAL_MS = 2000;  // 2 seconds between messages
-const MAX_QUESTION_LENGTH = 2000;  // Max characters for question
+const MIN_MESSAGE_LENGTH = 10;
+const MAX_MESSAGE_LENGTH = 500;
+const MIN_MESSAGE_INTERVAL_MS = 3000;  // 3 seconds between messages
+const FREE_DAILY_LIMIT = 20;
+const ESTIMATED_COST_PER_MESSAGE_CENTS = 1;  // ~$0.01 per message estimate
+
+// Tier limits
+const TIER_LIMITS: Record<string, number> = {
+  'free': FREE_DAILY_LIMIT,
+  'premium': Infinity,
+  'beta_tester': Infinity
+};
+
+// Spam detection patterns
+const SPAM_PATTERNS = [
+  /(.)\1{5,}/i,  // Repeated characters (aaaaaaa)
+  /https?:\/\/[^\s]+/i,  // URLs
+  /\b(buy|sell|discount|free money|click here|winner)\b/i,  // Common spam words
+];
+
+const PROFANITY_LIST = [
+  'fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'bastard', 'piss'
+];
+
+// Off-topic detection phrases (from Claude's response)
+const OFF_TOPIC_PHRASES = [
+  'i focus on signage',
+  "i can't help with that",
+  'not related to signs',
+  'outside my expertise',
+  'i specialize in sign',
+  'sign-related questions only',
+  "that's outside the scope"
+];
 
 // Pattern detection keywords
 const SHOPPER_PATTERNS = ['how much', 'cost', 'price', 'pricing', 'expensive', 'budget', 'how long', 'timeline', 'when can', 'find a', 'hire', 'recommend a', 'near me', 'in my area'];
@@ -30,10 +60,8 @@ function detectPatterns(messages: string[]): { shopper: number; owner: number; i
 }
 
 function getOffer(patterns: { shopper: number; owner: number; installer: number }, offersShown: string[], currentIntent: string, currentExperienceLevel: string): { offer: string; offerType: string } | null {
-  // User is already identified as a shopper by experience level - don't offer shopper conversion
   const isAlreadyShopper = currentIntent === 'shopping' || currentExperienceLevel === 'shopper';
   
-  // Don't offer shopper conversion if already a shopper
   if (patterns.shopper >= 2 && !isAlreadyShopper && !offersShown.includes('shopper')) {
     return {
       offer: "\n\n---\n💡 *It sounds like you might be looking to get a sign made. Would you like me to help connect you with a sign professional in your area?*",
@@ -41,7 +69,6 @@ function getOffer(patterns: { shopper: number; owner: number; installer: number 
     };
   }
   
-  // Don't offer owner/installer upgrades to shoppers
   if (isAlreadyShopper) {
     return null;
   }
@@ -63,17 +90,90 @@ function getOffer(patterns: { shopper: number; owner: number; installer: number 
   return null;
 }
 
+function isSpam(message: string): { isSpam: boolean; reason: string } {
+  // Check for spam patterns
+  for (const pattern of SPAM_PATTERNS) {
+    if (pattern.test(message)) {
+      return { isSpam: true, reason: 'spam_pattern' };
+    }
+  }
+  
+  // Check for profanity
+  const lowerMessage = message.toLowerCase();
+  for (const word of PROFANITY_LIST) {
+    if (lowerMessage.includes(word)) {
+      return { isSpam: true, reason: 'profanity' };
+    }
+  }
+  
+  return { isSpam: false, reason: '' };
+}
+
+function isOffTopic(response: string): boolean {
+  const lowerResponse = response.toLowerCase();
+  return OFF_TOPIC_PHRASES.some(phrase => lowerResponse.includes(phrase));
+}
+
+async function updateUsageStats(supabase: any, field: 'total_api_calls' | 'total_blocked_spam' | 'total_blocked_limit' | 'total_off_topic', costCents: number = 0) {
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Try to update existing record
+  const { data: existing } = await supabase
+    .from('usage_stats')
+    .select('id')
+    .eq('date', today)
+    .maybeSingle();
+  
+  if (existing) {
+    const updates: any = { updated_at: new Date().toISOString() };
+    
+    // Increment the specific field using raw SQL-like approach
+    const { data: current } = await supabase
+      .from('usage_stats')
+      .select(field + ', estimated_cost_cents')
+      .eq('id', existing.id)
+      .single();
+    
+    updates[field] = (current?.[field] || 0) + 1;
+    if (costCents > 0) {
+      updates.estimated_cost_cents = (current?.estimated_cost_cents || 0) + costCents;
+    }
+    
+    await supabase.from('usage_stats').update(updates).eq('id', existing.id);
+  } else {
+    // Create new record for today
+    const newRecord: any = {
+      date: today,
+      total_api_calls: 0,
+      total_blocked_spam: 0,
+      total_blocked_limit: 0,
+      total_off_topic: 0,
+      estimated_cost_cents: 0
+    };
+    newRecord[field] = 1;
+    if (costCents > 0) {
+      newRecord.estimated_cost_cents = costCents;
+    }
+    
+    await supabase.from('usage_stats').insert(newRecord);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
     const { question, user_context, conversation_id } = await req.json()
 
     console.log('Received chat request:', { question: question?.substring(0, 50), conversation_id })
 
-    // Input validation
+    // Input validation - must be a string
     if (!question || typeof question !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Invalid message format' }),
@@ -82,16 +182,18 @@ serve(async (req) => {
     }
 
     const trimmedQuestion = question.trim();
-    if (trimmedQuestion.length === 0) {
+    
+    // MESSAGE LENGTH LIMITS
+    if (trimmedQuestion.length < MIN_MESSAGE_LENGTH) {
       return new Response(
-        JSON.stringify({ error: 'Message cannot be empty' }),
+        JSON.stringify({ error: 'Please ask a complete question.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (trimmedQuestion.length > MAX_QUESTION_LENGTH) {
+    if (trimmedQuestion.length > MAX_MESSAGE_LENGTH) {
       return new Response(
-        JSON.stringify({ error: `Message must be less than ${MAX_QUESTION_LENGTH} characters` }),
+        JSON.stringify({ error: 'Please keep your question under 500 characters.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -103,14 +205,21 @@ serve(async (req) => {
       );
     }
 
+    // SPAM DETECTION
+    const spamCheck = isSpam(trimmedQuestion);
+    if (spamCheck.isSpam) {
+      console.log('Spam detected:', spamCheck.reason);
+      await updateUsageStats(supabase, 'total_blocked_spam');
+      return new Response(
+        JSON.stringify({ error: "I couldn't process that. Please ask a sign-related question." }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const CLAUDE_API_KEY = Deno.env.get('CLAUDE_API_KEY')
     if (!CLAUDE_API_KEY) {
       throw new Error('CLAUDE_API_KEY is not configured')
     }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Verify conversation exists and get user_id
     const { data: conversation, error: convError } = await supabase
@@ -131,11 +240,12 @@ serve(async (req) => {
       );
     }
 
-    // Verify user exists
+    // Get user data for rate limiting
+    let userData: any = null;
     if (conversation.user_id) {
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('id')
+        .select('id, messages_today, last_message_date, last_message_at, tier, off_topic_count, spam_flags')
         .eq('id', conversation.user_id)
         .maybeSingle();
 
@@ -146,49 +256,79 @@ serve(async (req) => {
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      userData = user;
     }
 
-    // Rate limiting check
-    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
-    
-    const { data: recentMessages, error: rateError } = await supabase
-      .from('messages')
-      .select('created_at')
-      .eq('conversation_id', conversation_id)
-      .eq('role', 'user')
-      .gte('created_at', windowStart)
-      .order('created_at', { ascending: false });
-
-    if (rateError) {
-      console.error('Rate limit check error:', rateError);
-      throw rateError;
-    }
-
-    if (recentMessages && recentMessages.length >= MAX_MESSAGES_PER_WINDOW) {
-      console.log('Rate limit exceeded for conversation:', conversation_id);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Rate limit exceeded. Please wait a moment before sending more messages.',
-          retryAfter: 60
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Retry-After': '60', 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check minimum interval between messages
-    if (recentMessages && recentMessages.length > 0) {
-      const lastMessageTime = new Date(recentMessages[0].created_at).getTime();
-      const timeSinceLastMessage = Date.now() - lastMessageTime;
+    if (userData) {
+      const today = new Date().toISOString().split('T')[0];
+      const userTier = userData.tier || 'free';
+      const dailyLimit = TIER_LIMITS[userTier] || FREE_DAILY_LIMIT;
       
-      if (timeSinceLastMessage < MIN_MESSAGE_INTERVAL_MS) {
-        const retryAfter = Math.ceil((MIN_MESSAGE_INTERVAL_MS - timeSinceLastMessage) / 1000);
-        console.log('Message sent too quickly, retry after:', retryAfter);
+      // Check if it's a new day and reset counter
+      let messagestoday = userData.messages_today || 0;
+      if (userData.last_message_date !== today) {
+        messagestoday = 0;
+      }
+
+      // DAILY MESSAGE LIMIT CHECK
+      if (messagestoday >= dailyLimit) {
+        console.log('Daily limit reached for user:', userData.id, 'tier:', userTier);
+        await updateUsageStats(supabase, 'total_blocked_limit');
         return new Response(
           JSON.stringify({ 
-            error: 'Please wait a moment between messages.',
-            retryAfter
+            error: "You've reached your daily limit (20 questions). Come back tomorrow, or contact us for unlimited access.",
+            limitReached: true
           }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // COOLDOWN CHECK (3 seconds between messages)
+      if (userData.last_message_at) {
+        const lastMessageTime = new Date(userData.last_message_at).getTime();
+        const timeSinceLastMessage = Date.now() - lastMessageTime;
+        
+        if (timeSinceLastMessage < MIN_MESSAGE_INTERVAL_MS) {
+          const waitSeconds = Math.ceil((MIN_MESSAGE_INTERVAL_MS - timeSinceLastMessage) / 1000);
+          console.log('Message sent too quickly, retry after:', waitSeconds);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Please wait a moment before sending another message.',
+              retryAfter: waitSeconds
+            }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // DUPLICATE MESSAGE CHECK
+      const { data: lastUserMessage } = await supabase
+        .from('messages')
+        .select('content')
+        .eq('conversation_id', conversation_id)
+        .eq('role', 'user')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastUserMessage && lastUserMessage.content.trim().toLowerCase() === trimmedQuestion.toLowerCase()) {
+        console.log('Duplicate message detected');
+        await updateUsageStats(supabase, 'total_blocked_spam');
+        return new Response(
+          JSON.stringify({ error: "I couldn't process that. Please ask a sign-related question." }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // OFF-TOPIC BLOCK CHECK (5+ off-topic in session)
+      if ((userData.off_topic_count || 0) >= 5) {
+        console.log('User blocked due to excessive off-topic messages');
+        return new Response(
+          JSON.stringify({ 
+            error: "I'm designed specifically for sign industry questions. Feel free to return when you have signage-related questions.",
+            blocked: true
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }
@@ -199,7 +339,6 @@ serve(async (req) => {
     let detectedPersona: string | null = null;
     
     if (conversation_id) {
-      // Get conversation metadata
       const { data: convData } = await supabase
         .from('conversations')
         .select('offers_shown, detected_persona')
@@ -209,7 +348,6 @@ serve(async (req) => {
       offersShown = convData?.offers_shown || [];
       detectedPersona = convData?.detected_persona || null;
       
-      // Get previous messages for context and pattern detection
       const { data: prevMessages } = await supabase
         .from('messages')
         .select('content, role')
@@ -222,8 +360,7 @@ serve(async (req) => {
       }
     }
     
-    // Add current question to messages for pattern detection
-    conversationMessages.push(question);
+    conversationMessages.push(trimmedQuestion);
 
     // Fetch system prompt from settings
     const { data: settings } = await supabase
@@ -235,15 +372,12 @@ serve(async (req) => {
 
     const systemPrompt = settings?.setting_value || 'You are SignMaker.ai, a helpful assistant for the sign industry. You help with signage and fabrication questions including channel letters, monument signs, materials, LED lighting, pricing, and installation.'
 
-    // Determine if user is a shopper (either by intent OR experience level selection)
+    // Determine if user is a shopper
     const isShopperByIntent = user_context?.intent === 'shopping';
     const isShopperByExperience = user_context?.experience_level === 'shopper';
     const isShopperUser = isShopperByIntent || isShopperByExperience;
-
-    // Track message count for shopper referral offer
     const messageCount = conversationMessages.length;
 
-    // Special handling for shoppers (sign buyers)
     const shopperGuidance = isShopperUser ? `
 
 SPECIAL GUIDANCE FOR SIGN BUYERS:
@@ -280,7 +414,9 @@ Intent: ${user_context?.intent || 'Unknown'}
 Message Count in Conversation: ${messageCount}
 ${shopperGuidance}
 
-${isShopperUser ? '' : 'Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.'}`
+${isShopperUser ? '' : 'Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.'}
+
+IMPORTANT: If the user asks about topics completely unrelated to signs, signage, or the sign industry, politely redirect them. You can say something like "I focus on signage and the sign industry. Is there something sign-related I can help you with?"`
 
     console.log('Calling Claude API...')
 
@@ -295,7 +431,7 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
         system: contextualPrompt,
-        messages: [{ role: 'user', content: question }]
+        messages: [{ role: 'user', content: trimmedQuestion }]
       })
     })
 
@@ -310,19 +446,34 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
 
     let assistantResponse = data.content[0].text
 
+    // Update usage stats for successful API call
+    await updateUsageStats(supabase, 'total_api_calls', ESTIMATED_COST_PER_MESSAGE_CENTS);
+
+    // OFF-TOPIC DETECTION
+    let newOffTopicCount = userData?.off_topic_count || 0;
+    if (isOffTopic(assistantResponse)) {
+      newOffTopicCount++;
+      console.log('Off-topic response detected, count:', newOffTopicCount);
+      await updateUsageStats(supabase, 'total_off_topic');
+      
+      // Add warning after 3 off-topic messages
+      if (newOffTopicCount >= 3 && newOffTopicCount < 5) {
+        assistantResponse += "\n\n---\n⚠️ *It seems like you have questions outside my expertise. I specialize in signage — is there anything sign-related I can help with?*";
+      }
+    }
+
     // Check if AI response contains SignExperts.ai referral
     const containsSignExpertsReferral = assistantResponse.toLowerCase().includes('signexperts.ai') || 
                                          assistantResponse.toLowerCase().includes('sign experts');
     
-    // Log SignExperts.ai referral if detected in response for shopper users
     if (isShopperUser && containsSignExpertsReferral && conversation_id) {
       console.log('Logging SignExperts.ai referral for shopper user');
       await supabase.from('signexperts_referrals').insert({
         user_id: conversation?.user_id || null,
         conversation_id: conversation_id,
         referral_type: 'signexperts',
-        referral_context: question.substring(0, 500), // Store what they were asking about
-        user_response: 'pending' // Will be updated if they respond
+        referral_context: trimmedQuestion.substring(0, 500),
+        user_response: 'pending'
       });
     }
 
@@ -337,19 +488,17 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
         assistantResponse += offer.offer;
         offersShown = [...offersShown, offer.offerType];
         
-        // Log shopper offer as a referral opportunity
         if (offer.offerType === 'shopper' && conversation_id) {
           console.log('Logging pattern-based shopper referral offer');
           await supabase.from('signexperts_referrals').insert({
             user_id: conversation?.user_id || null,
             conversation_id: conversation_id,
             referral_type: 'pattern_detected',
-            referral_context: 'User showed shopper patterns: ' + question.substring(0, 300),
+            referral_context: 'User showed shopper patterns: ' + trimmedQuestion.substring(0, 300),
             user_response: 'pending'
           });
         }
         
-        // Determine detected persona based on highest pattern count
         const maxPattern = Math.max(patterns.shopper, patterns.owner, patterns.installer);
         if (maxPattern >= 2) {
           if (patterns.shopper === maxPattern) detectedPersona = 'shopper';
@@ -359,14 +508,14 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
       }
     }
 
-    // Save messages to database if conversation_id provided
+    // Save messages to database
     if (conversation_id) {
       console.log('Saving messages to database...')
       
       await supabase.from('messages').insert({
         conversation_id,
         role: 'user',
-        content: question
+        content: trimmedQuestion
       })
 
       await supabase.from('messages').insert({
@@ -375,7 +524,6 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
         content: assistantResponse
       })
       
-      // Update conversation with offers shown and detected persona
       await supabase
         .from('conversations')
         .update({ 
@@ -383,6 +531,22 @@ ${isShopperUser ? '' : 'Adapt your response based on their experience level and 
           detected_persona: detectedPersona
         })
         .eq('id', conversation_id);
+    }
+
+    // Update user rate limiting counters
+    if (userData) {
+      const today = new Date().toISOString().split('T')[0];
+      const isNewDay = userData.last_message_date !== today;
+      
+      await supabase
+        .from('users')
+        .update({
+          messages_today: isNewDay ? 1 : (userData.messages_today || 0) + 1,
+          last_message_date: today,
+          last_message_at: new Date().toISOString(),
+          off_topic_count: newOffTopicCount
+        })
+        .eq('id', userData.id);
     }
 
     return new Response(
