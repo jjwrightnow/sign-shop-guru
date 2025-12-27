@@ -7,20 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// B2B inquiry trigger keywords
-const B2B_TRIGGERS = [
-  'training tool', 'train my team', 'train staff', 'customer-facing', 'sales tool',
-  'embed', 'white-label', 'white label', 'api access', 'integrate', 'integration',
-  'for my business', 'for our company', 'for my shop', 'business inquiry',
-  'licensing', 'enterprise', 'bulk', 'franchise'
-];
-
-// Referral trigger keywords
-const REFERRAL_TRIGGERS = [
-  'find a sign company', 'find a sign shop', 'recommend a sign', 'connect me with',
-  'sign professional', 'sign maker near', 'who can make', 'get a quote',
-  'need someone to', 'hire someone', 'looking for someone'
-];
+// Lead capture markers
+const MARKERS = {
+  REFERRAL_FORM: '[REFERRAL_FORM]',
+  REFERRAL_SUBMIT: '[REFERRAL_SUBMIT]',
+  B2B_FORM: '[B2B_FORM]',
+  B2B_SUBMIT: '[B2B_SUBMIT]'
+};
 
 // Email notification helper
 async function sendNotificationEmail(
@@ -51,59 +44,166 @@ async function sendNotificationEmail(
   }
 }
 
-// Parse B2B inquiry data from AI response
-function parseB2BData(response: string): { company_name?: string; role?: string; contact_info?: string; interest_type?: string; goals?: string } | null {
-  const b2bMarker = response.match(/\[B2B_DATA_COLLECTED\]([\s\S]*?)\[\/B2B_DATA_COLLECTED\]/);
-  if (!b2bMarker) return null;
-  
-  const dataBlock = b2bMarker[1];
+// Extract referral data from conversation history
+function extractReferralData(messages: { role: string; content: string }[]): {
+  location_city?: string;
+  location_state?: string;
+  project_type?: string;
+  timeline?: string;
+  phone?: string;
+  best_time_to_call?: string;
+  notes?: string;
+} {
   const data: any = {};
+  const allUserText = messages.filter(m => m.role === 'user').map(m => m.content).join(' ');
   
-  const companyMatch = dataBlock.match(/company_name:\s*(.+)/i);
-  const roleMatch = dataBlock.match(/role:\s*(.+)/i);
-  const contactMatch = dataBlock.match(/contact_info:\s*(.+)/i);
-  const interestMatch = dataBlock.match(/interest_type:\s*(.+)/i);
-  const goalsMatch = dataBlock.match(/goals:\s*(.+)/i);
+  // State patterns
+  const statePatterns = [
+    /(?:in|from|located in|live in|i'm in|i am in)\s+([A-Za-z\s]+),?\s*(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)/i,
+    /([A-Za-z\s]+),\s*(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)/i
+  ];
   
-  if (companyMatch) data.company_name = companyMatch[1].trim();
-  if (roleMatch) data.role = roleMatch[1].trim();
-  if (contactMatch) data.contact_info = contactMatch[1].trim();
-  if (interestMatch) data.interest_type = interestMatch[1].trim();
-  if (goalsMatch) data.goals = goalsMatch[1].trim();
+  for (const pattern of statePatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      data.location_city = match[1]?.trim();
+      data.location_state = match[2]?.trim();
+      break;
+    }
+  }
   
-  return Object.keys(data).length > 0 ? data : null;
+  // Phone pattern
+  const phoneMatch = allUserText.match(/(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/);
+  if (phoneMatch) data.phone = phoneMatch[1];
+  
+  // Timeline patterns
+  const timelinePatterns = [
+    /(?:timeline|need it|looking for|within|by)\s*(?:is\s+)?([^.!?\n]+(?:week|month|day|asap|soon|rush|urgent)[^.!?\n]*)/i,
+    /(asap|as soon as possible|rush|urgent|immediately|right away)/i,
+    /(\d+[-\s]?\d*\s*(?:week|month|day)s?)/i
+  ];
+  for (const pattern of timelinePatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      data.timeline = match[1]?.trim();
+      break;
+    }
+  }
+  
+  // Project type patterns
+  const projectPatterns = [
+    /(?:looking for|need|want|interested in)\s+(?:a\s+)?([^.!?\n]*(?:sign|letter|monument|banner|wrap|neon|led|display)[^.!?\n]*)/i,
+    /(channel letter|monument sign|banner|vehicle wrap|neon sign|led sign|dimensional letter|building sign|storefront|pylon)/i
+  ];
+  for (const pattern of projectPatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      data.project_type = match[1]?.trim();
+      break;
+    }
+  }
+  
+  // Best time to call
+  const timePatterns = [
+    /(?:best time|call me|reach me|contact me)\s*(?:is\s+)?(?:at\s+)?([^.!?\n]+(?:morning|afternoon|evening|am|pm|\d+)[^.!?\n]*)/i,
+    /(morning|afternoon|evening|anytime)/i
+  ];
+  for (const pattern of timePatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      data.best_time_to_call = match[1]?.trim();
+      break;
+    }
+  }
+  
+  // Notes - last substantial user message as context
+  const userMessages = messages.filter(m => m.role === 'user');
+  if (userMessages.length > 0) {
+    const relevantMessages = userMessages.slice(-3).map(m => m.content).join(' ');
+    data.notes = relevantMessages.substring(0, 500);
+  }
+  
+  return data;
 }
 
-// Parse referral data from AI response
-function parseReferralData(response: string): { location_city?: string; location_state?: string; project_type?: string; timeline?: string; phone?: string; best_time_to_call?: string; notes?: string } | null {
-  const referralMarker = response.match(/\[REFERRAL_DATA_COLLECTED\]([\s\S]*?)\[\/REFERRAL_DATA_COLLECTED\]/);
-  if (!referralMarker) return null;
-  
-  const dataBlock = referralMarker[1];
+// Extract B2B data from conversation history
+function extractB2BData(messages: { role: string; content: string }[]): {
+  company_name?: string;
+  role?: string;
+  contact_info?: string;
+  interest_type?: string;
+  goals?: string;
+} {
   const data: any = {};
+  const allUserText = messages.filter(m => m.role === 'user').map(m => m.content).join(' ');
   
-  const cityMatch = dataBlock.match(/location_city:\s*(.+)/i);
-  const stateMatch = dataBlock.match(/location_state:\s*(.+)/i);
-  const projectMatch = dataBlock.match(/project_type:\s*(.+)/i);
-  const timelineMatch = dataBlock.match(/timeline:\s*(.+)/i);
-  const phoneMatch = dataBlock.match(/phone:\s*(.+)/i);
-  const timeMatch = dataBlock.match(/best_time_to_call:\s*(.+)/i);
-  const notesMatch = dataBlock.match(/notes:\s*(.+)/i);
+  // Company name patterns
+  const companyPatterns = [
+    /(?:company|business|shop|we are|i work (?:at|for)|from)\s+(?:is\s+)?(?:called\s+)?["']?([A-Za-z0-9\s&'.,-]+?)["']?\s*(?:and|,|\.|$)/i,
+    /([A-Za-z0-9\s&'.,-]+?)\s+(?:sign(?:s)?|graphics|printing|company)/i
+  ];
+  for (const pattern of companyPatterns) {
+    const match = allUserText.match(pattern);
+    if (match && match[1].length > 2 && match[1].length < 100) {
+      data.company_name = match[1]?.trim();
+      break;
+    }
+  }
   
-  if (cityMatch) data.location_city = cityMatch[1].trim();
-  if (stateMatch) data.location_state = stateMatch[1].trim();
-  if (projectMatch) data.project_type = projectMatch[1].trim();
-  if (timelineMatch) data.timeline = timelineMatch[1].trim();
-  if (phoneMatch) data.phone = phoneMatch[1].trim();
-  if (timeMatch) data.best_time_to_call = timeMatch[1].trim();
-  if (notesMatch) data.notes = notesMatch[1].trim();
+  // Role patterns
+  const rolePatterns = [
+    /(?:i am|i'm|my role is|work as)\s+(?:a\s+|an\s+|the\s+)?([A-Za-z\s]+(?:owner|manager|director|ceo|president|founder|vp|supervisor|coordinator))/i,
+    /(owner|manager|director|ceo|president|founder|vp|supervisor|coordinator)/i
+  ];
+  for (const pattern of rolePatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      data.role = match[1]?.trim();
+      break;
+    }
+  }
   
-  return Object.keys(data).length > 0 ? data : null;
+  // Contact info (phone or email)
+  const phoneMatch = allUserText.match(/(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/);
+  const emailMatch = allUserText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  if (emailMatch) data.contact_info = emailMatch[1];
+  else if (phoneMatch) data.contact_info = phoneMatch[1];
+  
+  // Interest type
+  const interestPatterns = [
+    /(training|train my team|staff training|employee training)/i,
+    /(customer[- ]facing|sales tool|website|embed|widget)/i,
+    /(white[- ]label|api|integration|licensing)/i,
+    /(both|training and customer)/i
+  ];
+  for (const pattern of interestPatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      if (/training/i.test(match[1])) data.interest_type = 'training';
+      else if (/customer|sales|website|embed/i.test(match[1])) data.interest_type = 'customer-facing';
+      else if (/white|api|integration|licensing/i.test(match[1])) data.interest_type = 'licensing';
+      else if (/both/i.test(match[1])) data.interest_type = 'both';
+      break;
+    }
+  }
+  
+  // Goals - extract from conversation context
+  const userMessages = messages.filter(m => m.role === 'user');
+  if (userMessages.length > 0) {
+    const relevantMessages = userMessages.slice(-3).map(m => m.content).join(' ');
+    data.goals = relevantMessages.substring(0, 500);
+  }
+  
+  return data;
 }
 
-// Clean data markers from response before showing to user
-function cleanDataMarkers(response: string): string {
+// Clean all markers from response before showing to user
+function cleanAllMarkers(response: string): string {
   return response
+    .replace(/\[REFERRAL_FORM\]/g, '')
+    .replace(/\[REFERRAL_SUBMIT\]/g, '')
+    .replace(/\[B2B_FORM\]/g, '')
+    .replace(/\[B2B_SUBMIT\]/g, '')
     .replace(/\[B2B_DATA_COLLECTED\][\s\S]*?\[\/B2B_DATA_COLLECTED\]/g, '')
     .replace(/\[REFERRAL_DATA_COLLECTED\][\s\S]*?\[\/REFERRAL_DATA_COLLECTED\]/g, '')
     .trim();
@@ -324,10 +424,10 @@ serve(async (req) => {
       throw new Error('CLAUDE_API_KEY is not configured')
     }
 
-    // Verify conversation exists and get user_id
+    // Verify conversation exists and get user_id + form tracking state
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('user_id')
+      .select('user_id, offers_shown, detected_persona, referral_pending, referral_completed, b2b_pending, b2b_completed')
       .eq('id', conversation_id)
       .maybeSingle();
 
@@ -348,7 +448,7 @@ serve(async (req) => {
     if (conversation.user_id) {
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('id, messages_today, last_message_date, last_message_at, tier, off_topic_count, spam_flags')
+        .select('id, name, email, phone, messages_today, last_message_date, last_message_at, tier, off_topic_count, spam_flags')
         .eq('id', conversation.user_id)
         .maybeSingle();
 
@@ -438,32 +538,33 @@ serve(async (req) => {
 
     // Fetch conversation history and metadata
     let conversationMessages: string[] = [];
+    let fullConversationHistory: { role: string; content: string }[] = [];
     let offersShown: string[] = [];
     let detectedPersona: string | null = null;
+    let referralPending = conversation?.referral_pending || false;
+    let referralCompleted = conversation?.referral_completed || false;
+    let b2bPending = conversation?.b2b_pending || false;
+    let b2bCompleted = conversation?.b2b_completed || false;
+    
+    offersShown = conversation?.offers_shown || [];
+    detectedPersona = conversation?.detected_persona || null;
     
     if (conversation_id) {
-      const { data: convData } = await supabase
-        .from('conversations')
-        .select('offers_shown, detected_persona')
-        .eq('id', conversation_id)
-        .maybeSingle();
-      
-      offersShown = convData?.offers_shown || [];
-      detectedPersona = convData?.detected_persona || null;
-      
+      // Get ALL messages for data extraction
       const { data: prevMessages } = await supabase
         .from('messages')
         .select('content, role')
         .eq('conversation_id', conversation_id)
-        .eq('role', 'user')
         .order('created_at', { ascending: true });
       
       if (prevMessages) {
-        conversationMessages = prevMessages.map(m => m.content);
+        fullConversationHistory = prevMessages.map(m => ({ role: m.role, content: m.content }));
+        conversationMessages = prevMessages.filter(m => m.role === 'user').map(m => m.content);
       }
     }
     
     conversationMessages.push(trimmedQuestion);
+    fullConversationHistory.push({ role: 'user', content: trimmedQuestion });
 
     // Fetch system prompt from settings
     const { data: settings } = await supabase
@@ -540,115 +641,58 @@ serve(async (req) => {
     const isShopperUser = isShopperByIntent || isShopperByExperience;
     const messageCount = conversationMessages.length;
 
-    const shopperGuidance = isShopperUser ? `
+    const shopperGuidance = isShopperUser && !referralCompleted ? `
 
 SPECIAL GUIDANCE FOR SIGN BUYERS:
-This user is looking to purchase a sign, not a sign industry professional. They selected "${isShopperByExperience ? "I'm not in the sign industry — just need a sign" : "Shopping — I need a sign made"}". Adapt your responses:
+This user is looking to purchase a sign. Use beginner-friendly language.
 
-COMMUNICATION STYLE:
-- Use beginner-friendly language — NO industry jargon
-- Explain things simply, as you would to someone who has never bought a sign before
-- Focus on what they'll GET (the end result), not fabrication details
-- Use relatable comparisons (e.g., "like choosing between LED and fluorescent bulbs for your home")
+PROACTIVE REFERRAL:
+- After 2-3 exchanges (${messageCount >= 3 ? 'NOW is a good time' : 'wait for more exchanges'}), offer: "I can connect you with a sign professional in your area. Would that be helpful?"
+${referralPending ? '- Referral form is IN PROGRESS - continue collecting their info' : ''}
 
-CONVERSATION APPROACH:
-- Be helpful and informative about their sign options
-- Answer their questions clearly without overwhelming technical details
-- Focus on: realistic budget ranges, timeline expectations, what makes a quality sign
-- Help them understand what questions to ask sign companies
+REFERRAL COLLECTION (when user says YES or asks for a recommendation):
+1. Include [REFERRAL_FORM] marker and ask:
+   "I'd be happy to connect you! Quick questions: What city/state? What type of sign? Timeline? Phone number? Best time to call?"
+2. After they provide info, include [REFERRAL_SUBMIT] marker and confirm:
+   "Perfect! A sign professional will reach out within 1 business day."
+` : '';
 
-PROACTIVE REFERRAL (IMPORTANT):
-- After 2-3 helpful exchanges (${messageCount >= 3 ? 'NOW is a good time' : 'wait for more exchanges'}), offer to connect them with a sign professional
-- Say something like: "Based on what you're looking for, I can help connect you with a sign professional in your area. Would that be helpful?"
-- Don't push too hard, but make it a natural suggestion after you've been helpful
-
-REFERRAL DATA COLLECTION:
-When a shopper says YES to being connected with a sign professional, or asks "how do I find a sign company", "can you recommend someone", etc., collect their information conversationally:
-
-Ask: "I'd be happy to connect you with a sign pro! Quick questions:
-- What city and state are you in?
-- What type of sign are you looking for?
-- What's your timeline?
-- Best phone number to reach you?
-- Preferred time to be contacted?"
-
-After they provide the info, include this hidden data block at the END of your response (the user won't see it):
-[REFERRAL_DATA_COLLECTED]
-location_city: [their city]
-location_state: [their state]
-project_type: [sign type]
-timeline: [their timeline]
-phone: [their phone]
-best_time_to_call: [preferred time]
-notes: [any additional project details]
-[/REFERRAL_DATA_COLLECTED]
-
-Then confirm: "Perfect! A sign professional in your area will reach out within 1 business day. Anything else I can help with?"
-
-AVOID:
-- Technical manufacturing jargon (channel letters, raceway, routed faces, etc.) unless they ask
-- Overwhelming details about materials and processes
-- Assuming they know industry terminology` : '';
-
-    // B2B/Business inquiry guidance
-    const b2bGuidance = `
+    const b2bGuidance = !b2bCompleted ? `
 
 B2B INQUIRY COLLECTION:
-When a user shows interest in SignMaker.ai for their business (mentions training tool, white-label, API, embedding, enterprise use, or says "yes" to a B2B offer), collect their business information conversationally:
+When user mentions training tool, white-label, API, embedding, or enterprise use:
+${b2bPending ? '- B2B form is IN PROGRESS - continue collecting their info' : ''}
 
-Ask: "Great! Tell me a bit about your company:
-- Company name?
-- Your role?
-- Best email or phone to reach you?
-- What are you hoping to achieve — team training, customer-facing tool, or both?"
+1. Include [B2B_FORM] marker and ask:
+   "Great! Tell me about your company: Company name? Your role? Contact info? Goals (training, customer-facing, or both)?"
+2. After they provide info, include [B2B_SUBMIT] marker and confirm:
+   "Thanks! Someone will reach out within 1 business day."
+` : '';
 
-After they provide the info, include this hidden data block at the END of your response (the user won't see it):
-[B2B_DATA_COLLECTED]
-company_name: [their company]
-role: [their role]
-contact_info: [email or phone]
-interest_type: [training/customer-facing/both/other]
-goals: [what they want to achieve]
-[/B2B_DATA_COLLECTED]
-
-Then confirm: "Thanks! Someone from our team will reach out within 1 business day. Feel free to keep asking questions in the meantime."
-`;
-
-    // Build custom context section for trained users
     const customContextSection = userTrainingContext ? `
 
-USER'S CUSTOM CONTEXT (from "Train Me" feature):
+USER'S CUSTOM CONTEXT:
 ${userTrainingContext}
-
-INSTRUCTIONS FOR USING CUSTOM CONTEXT:
-- Use this context to personalize your answers
-- Reference their equipment, materials, and shop type when relevant
-- If they have specific equipment, skip suggestions to buy/outsource that capability
-- If they only make certain product types, focus on those solutions
-- If they have special instructions (like "we outsource electrical"), respect that
-- Don't repeat their context back to them unless asked
-- Assume they have the capabilities they listed` : '';
+- Use this to personalize answers
+- Reference their equipment/materials when relevant` : '';
 
     const contextualPrompt = `${systemPrompt}
 
 USER CONTEXT:
 Name: ${user_context?.name || 'Unknown'}
-Experience Level: ${user_context?.experience_level || 'Unknown'}${isShopperByExperience ? ' (NOT a sign professional - just needs a sign made)' : ''}
+Experience: ${user_context?.experience_level || 'Unknown'}
 Intent: ${user_context?.intent || 'Unknown'}
-Message Count in Conversation: ${messageCount}
+Messages: ${messageCount}
 ${customContextSection}
 ${shopperGuidance}
 ${b2bGuidance}
 
-${isShopperUser ? '' : 'Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.'}
-
-IMPORTANT: If the user asks about topics completely unrelated to signs, signage, or the sign industry, politely redirect them. You can say something like "I focus on signage and the sign industry. Is there something sign-related I can help you with?"
-
-CRITICAL DATA COLLECTION RULES:
-- The [B2B_DATA_COLLECTED] and [REFERRAL_DATA_COLLECTED] blocks are HIDDEN from users - they are for system processing only
-- Only include these blocks AFTER the user has provided the requested information
-- Keep collecting information conversationally until you have enough to fill the data block
-- Always confirm submission after collecting data`
+MARKER RULES:
+- [REFERRAL_FORM] = asking for referral details
+- [REFERRAL_SUBMIT] = user provided referral info, submit it
+- [B2B_FORM] = asking for B2B details  
+- [B2B_SUBMIT] = user provided B2B info, submit it
+- Markers are stripped from responses automatically`
 
     console.log('Calling Claude API...')
 
@@ -681,99 +725,27 @@ CRITICAL DATA COLLECTION RULES:
     // Update usage stats for successful API call
     await updateUsageStats(supabase, 'total_api_calls', ESTIMATED_COST_PER_MESSAGE_CENTS);
 
-    // ========== B2B DATA COLLECTION ==========
-    const b2bData = parseB2BData(assistantResponse);
-    if (b2bData && conversation?.user_id) {
-      console.log('B2B data collected:', b2bData);
-      
-      // Get user info
-      const { data: userInfo } = await supabase
-        .from('users')
-        .select('name, email')
-        .eq('id', conversation.user_id)
-        .single();
-      
-      // Save to b2b_inquiries table
-      const b2bRecord = {
-        company_name: b2bData.company_name || null,
-        contact_info: b2bData.contact_info || userInfo?.email || null,
-        role: b2bData.role || null,
-        interest_type: b2bData.interest_type || null,
-        goals: b2bData.goals || null,
-        user_id: conversation.user_id,
-        conversation_id: conversation_id,
-        status: 'new'
-      };
-      
-      const { data: insertedB2B, error: b2bError } = await supabase
-        .from('b2b_inquiries')
-        .insert(b2bRecord)
-        .select()
-        .single();
-      
-      if (b2bError) {
-        console.error('Error saving B2B inquiry:', b2bError);
-      } else {
-        console.log('B2B inquiry saved:', insertedB2B);
-        
-        // Send email notification to partners@signmaker.ai
-        const timestamp = new Date().toISOString();
-        const adminLink = 'https://signmaker.ai/admin';
-        
-        await sendNotificationEmail(
-          'partners@signmaker.ai',
-          `New B2B Inquiry: ${b2bData.company_name || 'Unknown Company'}`,
-          `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">NEW B2B INQUIRY</h2>
-            
-            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Company:</td>
-                <td style="padding: 8px 0;">${b2bData.company_name || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
-                <td style="padding: 8px 0;">${userInfo?.name || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
-                <td style="padding: 8px 0;">${b2bData.contact_info || userInfo?.email || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Role:</td>
-                <td style="padding: 8px 0;">${b2bData.role || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Interest:</td>
-                <td style="padding: 8px 0;">${b2bData.interest_type || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Goals:</td>
-                <td style="padding: 8px 0;">${b2bData.goals || 'Not provided'}</td>
-              </tr>
-            </table>
-            
-            <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
-            
-            <a href="${adminLink}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
-          </div>
-          `
-        );
-      }
+    // ========== MARKER-BASED LEAD CAPTURE ==========
+    
+    // Check for [REFERRAL_FORM] marker - AI is asking for referral details
+    if (assistantResponse.includes(MARKERS.REFERRAL_FORM) && !referralPending && !referralCompleted) {
+      console.log('Referral form initiated');
+      referralPending = true;
     }
-
-    // ========== REFERRAL DATA COLLECTION ==========
-    const referralData = parseReferralData(assistantResponse);
-    if (referralData && conversation?.user_id) {
-      console.log('Referral data collected:', referralData);
+    
+    // Check for [B2B_FORM] marker - AI is asking for B2B details
+    if (assistantResponse.includes(MARKERS.B2B_FORM) && !b2bPending && !b2bCompleted) {
+      console.log('B2B form initiated');
+      b2bPending = true;
+    }
+    
+    // Check for [REFERRAL_SUBMIT] marker - process referral submission (only once per conversation)
+    if (assistantResponse.includes(MARKERS.REFERRAL_SUBMIT) && !referralCompleted && conversation?.user_id) {
+      console.log('Processing referral submission');
       
-      // Get user info
-      const { data: userInfo } = await supabase
-        .from('users')
-        .select('name, email, phone')
-        .eq('id', conversation.user_id)
-        .single();
+      // Extract data from conversation history
+      const referralData = extractReferralData(fullConversationHistory);
+      console.log('Extracted referral data:', referralData);
       
       // Save to referrals table
       const referralRecord = {
@@ -783,27 +755,25 @@ CRITICAL DATA COLLECTION RULES:
         location_state: referralData.location_state || null,
         project_type: referralData.project_type || null,
         timeline: referralData.timeline || null,
-        phone: referralData.phone || userInfo?.phone || null,
+        phone: referralData.phone || userData?.phone || null,
         best_time_to_call: referralData.best_time_to_call || null,
         notes: referralData.notes || null,
         status: 'new'
       };
       
-      const { data: insertedReferral, error: referralError } = await supabase
+      const { error: referralError } = await supabase
         .from('referrals')
-        .insert(referralRecord)
-        .select()
-        .single();
+        .insert(referralRecord);
       
       if (referralError) {
         console.error('Error saving referral:', referralError);
       } else {
-        console.log('Referral saved:', insertedReferral);
+        console.log('Referral saved successfully');
+        referralCompleted = true;
+        referralPending = false;
         
         // Send email notification to ask@signmaker.ai
         const timestamp = new Date().toISOString();
-        const adminLink = 'https://signmaker.ai/admin';
-        
         await sendNotificationEmail(
           'ask@signmaker.ai',
           `New Referral: ${referralData.project_type || 'Sign Project'}`,
@@ -814,15 +784,15 @@ CRITICAL DATA COLLECTION RULES:
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
-                <td style="padding: 8px 0;">${userInfo?.name || 'Not provided'}</td>
+                <td style="padding: 8px 0;">${userData?.name || 'Not provided'}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
-                <td style="padding: 8px 0;">${userInfo?.email || 'Not provided'}</td>
+                <td style="padding: 8px 0;">${userData?.email || 'Not provided'}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
-                <td style="padding: 8px 0;">${referralData.phone || userInfo?.phone || 'Not provided'}</td>
+                <td style="padding: 8px 0;">${referralData.phone || userData?.phone || 'Not provided'}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Location:</td>
@@ -840,23 +810,95 @@ CRITICAL DATA COLLECTION RULES:
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
                 <td style="padding: 8px 0;">${referralData.best_time_to_call || 'Not provided'}</td>
               </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Notes:</td>
-                <td style="padding: 8px 0;">${referralData.notes || 'None'}</td>
-              </tr>
             </table>
             
             <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
             
-            <a href="${adminLink}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
+            <a href="https://signmaker.ai/admin" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
           </div>
           `
         );
       }
     }
-
-    // Clean data markers from response before showing to user
-    assistantResponse = cleanDataMarkers(assistantResponse);
+    
+    // Check for [B2B_SUBMIT] marker - process B2B submission (only once per conversation)
+    if (assistantResponse.includes(MARKERS.B2B_SUBMIT) && !b2bCompleted && conversation?.user_id) {
+      console.log('Processing B2B submission');
+      
+      // Extract data from conversation history
+      const b2bData = extractB2BData(fullConversationHistory);
+      console.log('Extracted B2B data:', b2bData);
+      
+      // Save to b2b_inquiries table
+      const b2bRecord = {
+        company_name: b2bData.company_name || null,
+        contact_info: b2bData.contact_info || userData?.email || null,
+        role: b2bData.role || null,
+        interest_type: b2bData.interest_type || null,
+        goals: b2bData.goals || null,
+        user_id: conversation.user_id,
+        conversation_id: conversation_id,
+        status: 'new'
+      };
+      
+      const { error: b2bError } = await supabase
+        .from('b2b_inquiries')
+        .insert(b2bRecord);
+      
+      if (b2bError) {
+        console.error('Error saving B2B inquiry:', b2bError);
+      } else {
+        console.log('B2B inquiry saved successfully');
+        b2bCompleted = true;
+        b2bPending = false;
+        
+        // Send email notification to partners@signmaker.ai
+        const timestamp = new Date().toISOString();
+        await sendNotificationEmail(
+          'partners@signmaker.ai',
+          `New B2B Inquiry: ${b2bData.company_name || 'Unknown Company'}`,
+          `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">NEW B2B INQUIRY</h2>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Company:</td>
+                <td style="padding: 8px 0;">${b2bData.company_name || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
+                <td style="padding: 8px 0;">${userData?.name || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
+                <td style="padding: 8px 0;">${b2bData.contact_info || userData?.email || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Role:</td>
+                <td style="padding: 8px 0;">${b2bData.role || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Interest:</td>
+                <td style="padding: 8px 0;">${b2bData.interest_type || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Goals:</td>
+                <td style="padding: 8px 0;">${b2bData.goals || 'Not provided'}</td>
+              </tr>
+            </table>
+            
+            <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
+            
+            <a href="https://signmaker.ai/admin" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
+          </div>
+          `
+        );
+      }
+    }
+    
+    // Clean all markers from response before showing to user
+    assistantResponse = cleanAllMarkers(assistantResponse);
 
     // OFF-TOPIC DETECTION
     let newOffTopicCount = userData?.off_topic_count || 0;
@@ -937,7 +979,11 @@ CRITICAL DATA COLLECTION RULES:
         .from('conversations')
         .update({ 
           offers_shown: offersShown,
-          detected_persona: detectedPersona
+          detected_persona: detectedPersona,
+          referral_pending: referralPending,
+          referral_completed: referralCompleted,
+          b2b_pending: b2bPending,
+          b2b_completed: b2bCompleted
         })
         .eq('id', conversation_id);
     }
