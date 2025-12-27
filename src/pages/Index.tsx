@@ -318,11 +318,38 @@ const Index = () => {
       await loadUserConversations(userData.userId);
     } catch (error: any) {
       console.error("Chat error:", error);
+      
+      // Parse error message for user-friendly display
+      let errorMessage = "Failed to get response. Please try again.";
+      
+      try {
+        // Check if the error message contains JSON (e.g., from edge function)
+        const errorBody = error.message?.includes('{') 
+          ? JSON.parse(error.message.substring(error.message.indexOf('{')))
+          : null;
+        
+        if (errorBody?.retryAfter) {
+          errorMessage = `Please wait ${errorBody.retryAfter} seconds before sending another message.`;
+        } else if (errorBody?.error) {
+          errorMessage = errorBody.error;
+        }
+      } catch {
+        // If parsing fails, check for common error patterns
+        if (error.message?.includes('429') || error.message?.toLowerCase().includes('wait')) {
+          errorMessage = "Please wait a moment before sending another message.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
-        title: "Error",
-        description: error.message || "Failed to get response. Please try again.",
+        title: "Please slow down",
+        description: errorMessage,
         variant: "destructive",
       });
+      
+      // Remove the pending user message on error
+      setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
     } finally {
       setIsTyping(false);
     }
