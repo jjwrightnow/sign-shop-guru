@@ -31,6 +31,7 @@ async function sendNotificationEmail(
     const resend = new Resend(resendApiKey);
     const result = await resend.emails.send({
       from: "SignMaker.ai <notifications@signmaker.ai>",
+      reply_to: "ask@signmaker.ai",
       to: [to],
       subject,
       html,
