@@ -5,6 +5,7 @@ import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import IntakeFormModal from "@/components/IntakeFormModal";
 import ConversationSidebar from "@/components/ConversationSidebar";
+import OptInPrompt from "@/components/OptInPrompt";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -37,6 +38,9 @@ const Index = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [showOptIn, setShowOptIn] = useState(false);
+  const [optInDismissed, setOptInDismissed] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -45,7 +49,7 @@ const Index = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping]);
+  }, [messages, isTyping, showOptIn]);
 
   // Check for returning user on mount
   useEffect(() => {
@@ -60,6 +64,11 @@ const Index = () => {
             .maybeSingle();
 
           if (user && !error) {
+            // Check if user already has phone (already opted in)
+            if (user.phone) {
+              setOptInDismissed(true);
+            }
+
             // Get latest conversation
             const { data: latestConvo } = await supabase
               .from("conversations")
@@ -91,6 +100,14 @@ const Index = () => {
 
     checkReturningUser();
   }, []);
+
+  // Show opt-in prompt after 5+ messages (10 messages = 5 exchanges)
+  useEffect(() => {
+    const userMessages = messages.filter(m => m.isUser).length;
+    if (userMessages >= 5 && !optInDismissed && !showOptIn) {
+      setShowOptIn(true);
+    }
+  }, [messages, optInDismissed, showOptIn]);
 
   const loadUserConversations = async (userId: string) => {
     setIsLoadingConversations(true);
@@ -149,10 +166,12 @@ const Index = () => {
           dbId: msg.id,
         }));
         setMessages(loadedMessages);
+        setMessageCount(dbMessages.filter(m => m.role === "user").length);
       } else {
         // No messages, show welcome
         const welcomeMessage = `Hey ${userName} — I help with signage and fabrication questions. What would you like to know?`;
         setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+        setMessageCount(0);
       }
     } catch (error) {
       console.error("Error loading messages:", error);
@@ -180,6 +199,7 @@ const Index = () => {
     // Set personalized welcome message
     const welcomeMessage = `Hey ${data.name} — I help with signage and fabrication questions. What would you like to know?`;
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+    setMessageCount(0);
 
     // Load conversations for sidebar
     await loadUserConversations(data.userId);
@@ -189,6 +209,7 @@ const Index = () => {
     if (!userData) return;
 
     setUserData({ ...userData, conversationId });
+    setShowOptIn(false);
     await loadConversationMessages(conversationId, userData.name);
   };
 
@@ -208,6 +229,8 @@ const Index = () => {
       
       const welcomeMessage = `Hey ${userData.name} — I help with signage and fabrication questions. What would you like to know?`;
       setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+      setMessageCount(0);
+      setShowOptIn(false);
 
       // Refresh conversations list
       await loadUserConversations(userData.userId);
@@ -266,6 +289,7 @@ const Index = () => {
         dbId: dbMessageId,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+      setMessageCount((prev) => prev + 1);
 
       // Refresh conversations to update first_message if this is first message
       await loadUserConversations(userData.userId);
@@ -279,6 +303,16 @@ const Index = () => {
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleOptInDismiss = () => {
+    setShowOptIn(false);
+    setOptInDismissed(true);
+  };
+
+  const handleOptInComplete = () => {
+    setShowOptIn(false);
+    setOptInDismissed(true);
   };
 
   return (
@@ -311,6 +345,16 @@ const Index = () => {
                 />
               ))}
               {isTyping && <TypingIndicator />}
+              
+              {/* Value-first opt-in prompt after 5+ exchanges */}
+              {showOptIn && userData && !isTyping && (
+                <OptInPrompt
+                  userId={userData.userId}
+                  onDismiss={handleOptInDismiss}
+                  onComplete={handleOptInComplete}
+                />
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
           </div>
