@@ -140,6 +140,9 @@ interface Referral {
   project_type: string | null;
   timeline: string | null;
   phone: string | null;
+  email: string | null;
+  timezone: string | null;
+  best_time_to_call: string | null;
   status: string;
   notes: string | null;
   created_at: string;
@@ -751,12 +754,12 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                             <div>
                               <span className="font-medium text-foreground">{referral.user_name || "Unknown"}</span>
                               <p className="text-sm text-muted-foreground">
-                                {referral.user_email} {referral.phone && `• ${referral.phone}`}
+                                {referral.email || referral.user_email} {referral.phone && `• ${referral.phone}`}
                               </p>
                             </div>
                             <p className="text-xs text-muted-foreground">{formatDate(referral.created_at)}</p>
                           </div>
-                          <div className="grid grid-cols-2 gap-4 mb-3 text-sm">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3 text-sm">
                             <div>
                               <span className="text-muted-foreground">Location:</span>{" "}
                               {referral.location_city && referral.location_state 
@@ -770,6 +773,14 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                             <div>
                               <span className="text-muted-foreground">Timeline:</span>{" "}
                               {formatTimeline(referral.timeline)}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Best Time:</span>{" "}
+                              {referral.best_time_to_call || "—"}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Timezone:</span>{" "}
+                              {referral.timezone || "—"}
                             </div>
                           </div>
                           <div className="flex gap-3">
