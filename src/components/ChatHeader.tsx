@@ -1,6 +1,12 @@
-import { Zap } from "lucide-react";
+import { Zap, GraduationCap } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-const ChatHeader = () => {
+interface ChatHeaderProps {
+  onTrainMeClick?: () => void;
+  isTrained?: boolean;
+}
+
+const ChatHeader = ({ onTrainMeClick, isTrained }: ChatHeaderProps) => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
       <div className="container flex h-16 items-center justify-between px-4">
@@ -19,6 +25,26 @@ const ChatHeader = () => {
             </div>
             <p className="text-xs text-muted-foreground">Industry Q&A Assistant</p>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isTrained && (
+            <span className="hidden sm:flex items-center gap-1 text-xs text-primary/80 bg-primary/10 px-2 py-1 rounded-full border border-primary/20">
+              <GraduationCap className="h-3 w-3" />
+              Trained
+            </span>
+          )}
+          {onTrainMeClick && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onTrainMeClick}
+              className="flex items-center gap-2 border-primary/30 hover:bg-primary/10 hover:border-primary/50"
+            >
+              <GraduationCap className="h-4 w-4 text-primary" />
+              <span className="hidden sm:inline">Train Me</span>
+            </Button>
+          )}
         </div>
       </div>
     </header>

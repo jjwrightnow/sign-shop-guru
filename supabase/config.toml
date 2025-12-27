@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.get-user-by-email]
 verify_jwt = false
+
+[functions.user-context]
+verify_jwt = false

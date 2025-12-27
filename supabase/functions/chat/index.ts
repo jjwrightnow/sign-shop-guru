@@ -372,6 +372,65 @@ serve(async (req) => {
 
     const systemPrompt = settings?.setting_value || 'You are SignMaker.ai, a helpful assistant for the sign industry. You help with signage and fabrication questions including channel letters, monument signs, materials, LED lighting, pricing, and installation.'
 
+    // Fetch user's custom training context
+    let userTrainingContext = '';
+    if (conversation?.user_id) {
+      const { data: userContextData } = await supabase
+        .from('user_context')
+        .select('context_type, context_key, context_value')
+        .eq('user_id', conversation.user_id)
+        .eq('is_active', true);
+      
+      if (userContextData && userContextData.length > 0) {
+        const contextLines: string[] = [];
+        
+        // Group by context type for better readability
+        const groupedContext: Record<string, string[]> = {};
+        userContextData.forEach((c: { context_type: string; context_key: string; context_value: string }) => {
+          if (!groupedContext[c.context_type]) {
+            groupedContext[c.context_type] = [];
+          }
+          
+          // Format the context nicely
+          let formattedValue = c.context_value;
+          if (c.context_key === 'list') {
+            // Convert comma-separated IDs to readable format
+            formattedValue = c.context_value.split(',').map(id => 
+              id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            ).join(', ');
+          }
+          
+          const keyLabel = c.context_key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          groupedContext[c.context_type].push(`${keyLabel}: ${formattedValue}`);
+        });
+        
+        // Format for prompt
+        if (groupedContext['shop_info']) {
+          contextLines.push('SHOP INFO:');
+          groupedContext['shop_info'].forEach(line => contextLines.push(`  - ${line}`));
+        }
+        if (groupedContext['equipment']) {
+          contextLines.push('EQUIPMENT:');
+          groupedContext['equipment'].forEach(line => contextLines.push(`  - ${line}`));
+        }
+        if (groupedContext['materials']) {
+          contextLines.push('MATERIALS IN STOCK:');
+          groupedContext['materials'].forEach(line => contextLines.push(`  - ${line}`));
+        }
+        if (groupedContext['products']) {
+          contextLines.push('PRODUCTS MADE:');
+          groupedContext['products'].forEach(line => contextLines.push(`  - ${line}`));
+        }
+        if (groupedContext['preferences']) {
+          contextLines.push('SPECIAL INSTRUCTIONS:');
+          groupedContext['preferences'].forEach(line => contextLines.push(`  - ${line}`));
+        }
+        
+        userTrainingContext = contextLines.join('\n');
+        console.log('User has custom training context:', userContextData.length, 'items');
+      }
+    }
+
     // Determine if user is a shopper
     const isShopperByIntent = user_context?.intent === 'shopping';
     const isShopperByExperience = user_context?.experience_level === 'shopper';
@@ -405,6 +464,21 @@ AVOID:
 - Overwhelming details about materials and processes
 - Assuming they know industry terminology` : '';
 
+    // Build custom context section for trained users
+    const customContextSection = userTrainingContext ? `
+
+USER'S CUSTOM CONTEXT (from "Train Me" feature):
+${userTrainingContext}
+
+INSTRUCTIONS FOR USING CUSTOM CONTEXT:
+- Use this context to personalize your answers
+- Reference their equipment, materials, and shop type when relevant
+- If they have specific equipment, skip suggestions to buy/outsource that capability
+- If they only make certain product types, focus on those solutions
+- If they have special instructions (like "we outsource electrical"), respect that
+- Don't repeat their context back to them unless asked
+- Assume they have the capabilities they listed` : '';
+
     const contextualPrompt = `${systemPrompt}
 
 USER CONTEXT:
@@ -412,6 +486,7 @@ Name: ${user_context?.name || 'Unknown'}
 Experience Level: ${user_context?.experience_level || 'Unknown'}${isShopperByExperience ? ' (NOT a sign professional - just needs a sign made)' : ''}
 Intent: ${user_context?.intent || 'Unknown'}
 Message Count in Conversation: ${messageCount}
+${customContextSection}
 ${shopperGuidance}
 
 ${isShopperUser ? '' : 'Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.'}
