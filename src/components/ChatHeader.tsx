@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 interface ChatHeaderProps {
   onTrainMeClick?: () => void;
   isTrained?: boolean;
+  onForgetMe?: () => void;
 }
 
-const ChatHeader = ({ onTrainMeClick, isTrained }: ChatHeaderProps) => {
+const ChatHeader = ({ onTrainMeClick, isTrained, onForgetMe }: ChatHeaderProps) => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
       <div className="container flex h-16 items-center justify-between px-4">
@@ -28,6 +29,14 @@ const ChatHeader = ({ onTrainMeClick, isTrained }: ChatHeaderProps) => {
         </div>
 
         <div className="flex items-center gap-2">
+          {onForgetMe && (
+            <button
+              onClick={onForgetMe}
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
+            >
+              Forget me
+            </button>
+          )}
           {isTrained && (
             <span className="hidden sm:flex items-center gap-1 text-xs text-primary/80 bg-primary/10 px-2 py-1 rounded-full border border-primary/20">
               <GraduationCap className="h-3 w-3" />

@@ -35,11 +35,11 @@ const ConversationSidebar = ({
     
     if (diffDays === 0) return "Today";
     if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
+    if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'short' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const truncateText = (text: string, maxLength: number = 40) => {
+  const truncateText = (text: string, maxLength: number = 35) => {
     if (!text) return "New conversation";
     return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
   };
@@ -47,14 +47,15 @@ const ConversationSidebar = ({
   return (
     <div
       className={cn(
-        "h-full bg-surface border-r border-border flex flex-col transition-all duration-300",
+        "h-full border-r border-border flex flex-col transition-all duration-300",
         isCollapsed ? "w-14" : "w-64"
       )}
+      style={{ backgroundColor: '#1a1a1a' }}
     >
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center justify-between">
         {!isCollapsed && (
-          <h2 className="text-sm font-semibold text-foreground">Conversations</h2>
+          <h2 className="text-sm font-semibold text-foreground">Your Conversations</h2>
         )}
         <Button
           variant="ghost"
@@ -75,9 +76,10 @@ const ConversationSidebar = ({
         <Button
           onClick={onNewChat}
           className={cn(
-            "w-full bg-primary text-primary-foreground hover:neon-glow-strong transition-all",
+            "w-full text-primary-foreground transition-all",
             isCollapsed ? "px-0" : ""
           )}
+          style={{ backgroundColor: '#00d4ff' }}
         >
           <Plus className="h-4 w-4" />
           {!isCollapsed && <span className="ml-2">New Chat</span>}
@@ -105,24 +107,34 @@ const ConversationSidebar = ({
                 key={conv.id}
                 onClick={() => onSelectConversation(conv.id)}
                 className={cn(
-                  "w-full text-left rounded-lg p-2 transition-colors",
+                  "w-full text-left rounded-lg p-2.5 transition-colors",
                   activeConversationId === conv.id
                     ? "bg-primary/20 border border-primary/30"
-                    : "hover:bg-muted",
+                    : "hover:bg-muted/50",
                   isCollapsed ? "flex justify-center" : ""
                 )}
               >
                 {isCollapsed ? (
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  <MessageSquare className={cn(
+                    "h-4 w-4",
+                    activeConversationId === conv.id ? "text-primary" : "text-muted-foreground"
+                  )} />
                 ) : (
-                  <>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {formatDate(conv.created_at)}
+                      </span>
+                      {conv.message_count !== undefined && conv.message_count > 0 && (
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                          {conv.message_count} msgs
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-foreground truncate">
                       {truncateText(conv.first_message || "")}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formatDate(conv.created_at)}
-                    </p>
-                  </>
+                  </div>
                 )}
               </button>
             ))
