@@ -776,44 +776,45 @@ serve(async (req) => {
     const isShopperUser = isShopperByIntent || isShopperByExperience;
     const messageCount = conversationMessages.length;
 
-    const shopperGuidance = isShopperUser && !referralCompleted ? `
+    // REACTIVE ONLY - Only help with referrals/B2B when user explicitly asks
+    const referralGuidance = referralPending ? `
 
-SPECIAL GUIDANCE FOR SIGN BUYERS:
-This user is looking to purchase a sign. Use beginner-friendly language.
+REFERRAL IN PROGRESS:
+User has requested a referral. Continue collecting:
+- Location (city/state)
+- Project type
+- Timeline
+- Phone number
+- Preferred contact method
+- Best time to call
 
-PROACTIVE REFERRAL:
-- After 2-3 exchanges (${messageCount >= 3 ? 'NOW is a good time' : 'wait for more exchanges'}), offer: "I can connect you with a sign professional in your area. Would that be helpful?"
-${referralPending ? '- Referral form is IN PROGRESS - continue collecting their info' : ''}
-
-REFERRAL COLLECTION (when user says YES or asks for a recommendation):
-1. Include [REFERRAL_FORM] marker and collect info in this order:
-   - Location (city/state)
-   - What type of sign project
-   - Timeline
-   - Phone number
-   - How they prefer to be contacted: by email or phone?
-   - Best time to contact them
-   - Their timezone (if not already mentioned or obvious from location)
-   
-2. Example flow: "I'd be happy to connect you! What city and state are you in? What type of sign are you looking for? What's your timeline? And what's your phone number so a sign pro can reach you?"
-
-3. After they provide phone, follow up: "Great! Do you prefer to be contacted by email or phone? What time works best, and what timezone are you in?"
-
-4. After they provide all info, include [REFERRAL_SUBMIT] marker and confirm:
-   "Perfect! A sign professional will reach out within 1 business day."
+After they provide info, include [REFERRAL_SUBMIT] marker and confirm.
 ` : '';
 
-    const b2bGuidance = !b2bCompleted ? `
+    const b2bGuidance = b2bPending ? `
 
-B2B INQUIRY COLLECTION:
-When user mentions training tool, white-label, API, embedding, or enterprise use:
-${b2bPending ? '- B2B form is IN PROGRESS - continue collecting their info' : ''}
+B2B INQUIRY IN PROGRESS:
+User asked about business use. Continue collecting:
+- Company name
+- Their role
+- Contact info
+- Goals (training, customer-facing, or both)
 
-1. Include [B2B_FORM] marker and ask:
-   "Great! Tell me about your company: Company name? Your role? Contact info? Goals (training, customer-facing, or both)?"
-2. After they provide info, include [B2B_SUBMIT] marker and confirm:
-   "Thanks! Someone will reach out within 1 business day."
+After they provide info, include [B2B_SUBMIT] marker and confirm.
 ` : '';
+
+    // REACTIVE TRIGGERS - Only if user explicitly asks
+    const reactiveHelp = `
+
+REACTIVE OFFERS ONLY:
+DO NOT proactively offer referrals, B2B, or any sales. 
+
+ONLY use markers if user EXPLICITLY asks:
+- [REFERRAL_FORM] - ONLY if user says "recommend a sign company", "find someone to make this", "connect me with a pro", "where can I get this made", etc.
+- [B2B_FORM] - ONLY if user asks about API, embedding, white-label, training tool, or business use
+
+If user just asks educational questions, answer them WITHOUT offering services.
+`;
 
     const customContextSection = userTrainingContext ? `
 
@@ -846,8 +847,9 @@ Experience: ${user_context?.experience_level || 'Unknown'}
 Intent: ${user_context?.intent || 'Unknown'}
 Messages: ${messageCount}
 ${customContextSection}
-${shopperGuidance}
+${referralGuidance}
 ${b2bGuidance}
+${reactiveHelp}
 ${followupContext}
 
 MARKER RULES:
@@ -1150,36 +1152,9 @@ MARKER RULES:
       });
     }
 
-    // Pattern detection after 3+ messages
-    if (conversationMessages.length >= 3) {
-      const patterns = detectPatterns(conversationMessages);
-      console.log('Detected patterns:', patterns);
-      
-      const offer = getOffer(patterns, offersShown, user_context?.intent || '', user_context?.experience_level || '');
-      
-      if (offer) {
-        assistantResponse += offer.offer;
-        offersShown = [...offersShown, offer.offerType];
-        
-        if (offer.offerType === 'shopper' && conversation_id) {
-          console.log('Logging pattern-based shopper referral offer');
-          await supabase.from('signexperts_referrals').insert({
-            user_id: conversation?.user_id || null,
-            conversation_id: conversation_id,
-            referral_type: 'pattern_detected',
-            referral_context: 'User showed shopper patterns: ' + trimmedQuestion.substring(0, 300),
-            user_response: 'pending'
-          });
-        }
-        
-        const maxPattern = Math.max(patterns.shopper, patterns.owner, patterns.installer);
-        if (maxPattern >= 2) {
-          if (patterns.shopper === maxPattern) detectedPersona = 'shopper';
-          else if (patterns.owner === maxPattern) detectedPersona = 'owner';
-          else if (patterns.installer === maxPattern) detectedPersona = 'installer';
-        }
-      }
-    }
+    // REMOVED: Automatic pattern detection and proactive offers
+    // Pattern detection is now disabled - offers are reactive only
+    // The system prompt instructs Claude to only offer when user explicitly asks
 
     // ========== TRANSCRIPT OFFER DETECTION ==========
     const lowerQuestion = trimmedQuestion.toLowerCase();
