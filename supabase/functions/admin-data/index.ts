@@ -1,9 +1,39 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { Resend } from "https://esm.sh/resend@2.0.0"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token',
+}
+
+// Email notification helper
+async function sendNotificationEmail(
+  to: string,
+  subject: string,
+  html: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email not configured" };
+    }
+    
+    const resend = new Resend(resendApiKey);
+    const result = await resend.emails.send({
+      from: "SignMaker.ai <onboarding@resend.dev>",
+      to: [to],
+      subject,
+      html,
+    });
+    
+    console.log("Email sent successfully:", result);
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error sending email:", error);
+    return { success: false, error: error.message };
+  }
 }
 
 serve(async (req) => {
@@ -252,6 +282,151 @@ serve(async (req) => {
       if (error) throw error
       return new Response(
         JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Add B2B inquiry with email notification
+    if (action === 'addB2BInquiry') {
+      const { error, data: insertedData } = await supabase
+        .from('b2b_inquiries')
+        .insert(data)
+        .select()
+        .single()
+      
+      if (error) throw error
+
+      // Send email notification to partners@signmaker.ai
+      const timestamp = new Date().toISOString();
+      const adminLink = `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://signmaker.ai'}/admin`;
+      
+      await sendNotificationEmail(
+        'partners@signmaker.ai',
+        `New B2B Inquiry: ${data.company_name || 'Unknown Company'}`,
+        `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">NEW B2B INQUIRY</h2>
+          
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Company:</td>
+              <td style="padding: 8px 0;">${data.company_name || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
+              <td style="padding: 8px 0;">${data.contact_name || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
+              <td style="padding: 8px 0;">${data.contact_info || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Role:</td>
+              <td style="padding: 8px 0;">${data.role || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Interest:</td>
+              <td style="padding: 8px 0;">${data.interest_type || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Goals:</td>
+              <td style="padding: 8px 0;">${data.goals || 'Not provided'}</td>
+            </tr>
+          </table>
+          
+          <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
+          
+          <a href="${adminLink}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
+        </div>
+        `
+      );
+
+      return new Response(
+        JSON.stringify({ success: true, data: insertedData }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Add referral with email notification
+    if (action === 'addReferral') {
+      const { error, data: insertedData } = await supabase
+        .from('referrals')
+        .insert(data)
+        .select()
+        .single()
+      
+      if (error) throw error
+
+      // Get user info if available
+      let userName = 'Unknown';
+      let userEmail = 'Not provided';
+      if (data.user_id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('name, email')
+          .eq('id', data.user_id)
+          .single();
+        if (userData) {
+          userName = userData.name;
+          userEmail = userData.email;
+        }
+      }
+
+      // Send email notification to ask@signmaker.ai
+      const timestamp = new Date().toISOString();
+      const adminLink = `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.lovable.app') || 'https://signmaker.ai'}/admin`;
+      
+      await sendNotificationEmail(
+        'ask@signmaker.ai',
+        `New Referral: ${data.project_type || 'Sign Project'}`,
+        `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">NEW REFERRAL</h2>
+          
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
+              <td style="padding: 8px 0;">${userName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
+              <td style="padding: 8px 0;">${userEmail}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
+              <td style="padding: 8px 0;">${data.phone || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Project Type:</td>
+              <td style="padding: 8px 0;">${data.project_type || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Location:</td>
+              <td style="padding: 8px 0;">${data.location_city || ''} ${data.location_state || ''}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Timeline:</td>
+              <td style="padding: 8px 0;">${data.timeline || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
+              <td style="padding: 8px 0;">${data.best_time_to_call || 'Not provided'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666;">Notes:</td>
+              <td style="padding: 8px 0;">${data.notes || 'None'}</td>
+            </tr>
+          </table>
+          
+          <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
+          
+          <a href="${adminLink}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
+        </div>
+        `
+      );
+
+      return new Response(
+        JSON.stringify({ success: true, data: insertedData }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
