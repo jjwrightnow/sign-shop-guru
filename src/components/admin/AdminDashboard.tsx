@@ -43,6 +43,7 @@ import {
 
 interface AdminDashboardProps {
   onLogout: () => void;
+  adminToken: string;
 }
 
 interface Stats {
@@ -149,7 +150,7 @@ interface Referral {
 const B2B_STATUSES = ['new', 'contacted', 'demo_scheduled', 'closed_won', 'closed_lost'];
 const REFERRAL_STATUSES = ['new', 'referred', 'contacted', 'quoted', 'won', 'lost'];
 
-const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
+const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
   const { toast } = useToast();
   const [stats, setStats] = useState<Stats>({
     totalUsers: 0,
@@ -185,260 +186,137 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const fetchAllData = async () => {
     setIsLoading(true);
-    await Promise.all([
-      fetchStats(),
-      fetchConversations(),
-      fetchFeedback(),
-      fetchGaps(),
-      fetchSettings(),
-      fetchLeads(),
-      fetchB2BInquiries(),
-      fetchPartners(),
-      fetchReferrals(),
-    ]);
-    setIsLoading(false);
-  };
-
-  const fetchStats = async () => {
     try {
-      const [users, convos, messages, feedbackData, leadsData, b2bData] = await Promise.all([
-        supabase.from("users").select("id", { count: "exact" }),
-        supabase.from("conversations").select("id", { count: "exact" }),
-        supabase.from("messages").select("id, created_at", { count: "exact" }),
-        supabase.from("feedback").select("rating"),
-        supabase.from("users").select("id", { count: "exact" }).eq("intent", "shopping"),
-        supabase.from("b2b_inquiries").select("id", { count: "exact" }),
-      ]);
+      const { data, error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "fetchAll" },
+        headers: { "x-admin-token": adminToken },
+      });
 
+      if (error) throw error;
+
+      // Process the data
+      const users = data.users || [];
+      const allConversations = data.conversations || [];
+      const allMessages = data.messages || [];
+      const allFeedback = data.feedback || [];
+      const allSettings = data.settings || [];
+      const allB2B = data.b2b_inquiries || [];
+      const allPartners = data.partners || [];
+      const allReferrals = data.referrals || [];
+
+      // Calculate stats
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
-      const messagesToday = messages.data?.filter(
-        (m) => new Date(m.created_at) >= today
-      ).length || 0;
-
-      const helpful = feedbackData.data?.filter((f) => f.rating === "helpful").length || 0;
-      const notHelpful = feedbackData.data?.filter((f) => f.rating === "not_helpful").length || 0;
+      const messagesToday = allMessages.filter(
+        (m: any) => new Date(m.created_at) >= today
+      ).length;
+      const helpful = allFeedback.filter((f: any) => f.rating === "helpful").length;
+      const notHelpful = allFeedback.filter((f: any) => f.rating === "not_helpful").length;
+      const shopperLeads = users.filter((u: any) => u.intent === "shopping");
 
       setStats({
-        totalUsers: users.count || 0,
-        totalConversations: convos.count || 0,
-        totalMessages: messages.count || 0,
+        totalUsers: users.length,
+        totalConversations: allConversations.length,
+        totalMessages: allMessages.length,
         messagesToday,
         helpfulFeedback: helpful,
         notHelpfulFeedback: notHelpful,
-        totalLeads: leadsData.count || 0,
-        totalB2BInquiries: b2bData.count || 0,
+        totalLeads: shopperLeads.length,
+        totalB2BInquiries: allB2B.length,
       });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
-  };
 
-  const fetchConversations = async () => {
-    try {
-      const { data: convos, error } = await supabase
-        .from("conversations")
-        .select(`
-          id,
-          created_at,
-          user_id,
-          users (name, email, experience_level)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      const conversationsWithMessages = await Promise.all(
-        (convos || []).map(async (conv: any) => {
-          const { data: messages } = await supabase
-            .from("messages")
-            .select("content, role, created_at")
-            .eq("conversation_id", conv.id)
-            .order("created_at", { ascending: true });
-
-          return {
-            id: conv.id,
-            user_name: conv.users?.name || "Unknown",
-            user_email: conv.users?.email || "Unknown",
-            experience_level: conv.users?.experience_level || "Unknown",
-            created_at: conv.created_at,
-            message_count: messages?.length || 0,
-            last_message: messages?.[messages.length - 1]?.content || "",
-            messages: messages || [],
-          };
-        })
-      );
-
+      // Process conversations with messages
+      const conversationsWithMessages = allConversations.map((conv: any) => {
+        const user = users.find((u: any) => u.id === conv.user_id);
+        const convMessages = allMessages.filter((m: any) => m.conversation_id === conv.id);
+        return {
+          id: conv.id,
+          user_name: user?.name || "Unknown",
+          user_email: user?.email || "Unknown",
+          experience_level: user?.experience_level || "Unknown",
+          created_at: conv.created_at,
+          message_count: convMessages.length,
+          last_message: convMessages[convMessages.length - 1]?.content || "",
+          messages: convMessages,
+        };
+      });
       setConversations(conversationsWithMessages);
-    } catch (error) {
-      console.error("Error fetching conversations:", error);
-    }
-  };
 
-  const fetchFeedback = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("feedback")
-        .select(`
-          id,
-          rating,
-          comment,
-          created_at,
-          message_id,
-          messages (content, conversation_id)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      const feedbackWithContext = await Promise.all(
-        (data || []).map(async (f: any) => {
-          let assistantResponse = "";
-          if (f.messages?.conversation_id) {
-            const { data: prevMessages } = await supabase
-              .from("messages")
-              .select("content, role")
-              .eq("conversation_id", f.messages.conversation_id)
-              .order("created_at", { ascending: true });
-
-            const msgIndex = prevMessages?.findIndex(
-              (m) => m.content === f.messages.content && m.role === "user"
-            );
-            if (msgIndex !== undefined && msgIndex >= 0 && prevMessages?.[msgIndex + 1]) {
-              assistantResponse = prevMessages[msgIndex + 1].content;
-            }
+      // Process feedback with context
+      const feedbackWithContext = allFeedback.map((f: any) => {
+        const message = allMessages.find((m: any) => m.id === f.message_id);
+        let assistantResponse = "";
+        if (message) {
+          const convMessages = allMessages
+            .filter((m: any) => m.conversation_id === message.conversation_id)
+            .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+          const msgIndex = convMessages.findIndex((m: any) => m.id === f.message_id);
+          if (msgIndex >= 0 && convMessages[msgIndex + 1]) {
+            assistantResponse = convMessages[msgIndex + 1].content;
           }
-
-          return {
-            id: f.id,
-            rating: f.rating,
-            comment: f.comment,
-            created_at: f.created_at,
-            message_content: f.messages?.content || "",
-            assistant_response: assistantResponse,
-          };
-        })
-      );
-
+        }
+        return {
+          id: f.id,
+          rating: f.rating,
+          comment: f.comment,
+          created_at: f.created_at,
+          message_content: message?.content || "",
+          assistant_response: assistantResponse,
+        };
+      });
       setFeedback(feedbackWithContext);
-    } catch (error) {
-      console.error("Error fetching feedback:", error);
-    }
-  };
 
-  const fetchGaps = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("id, content, created_at, conversation_id")
-        .eq("role", "assistant")
-        .or(
-          "content.ilike.%I don't have%,content.ilike.%check with%,content.ilike.%I'm not sure%,content.ilike.%I cannot%,content.ilike.%I can't verify%"
-        )
-        .order("created_at", { ascending: false })
-        .limit(50);
+      // Process gaps
+      const gapMessages = allMessages.filter((m: any) => {
+        if (m.role !== "assistant") return false;
+        const content = m.content.toLowerCase();
+        return (
+          content.includes("i don't have") ||
+          content.includes("check with") ||
+          content.includes("i'm not sure") ||
+          content.includes("i cannot") ||
+          content.includes("i can't verify")
+        );
+      });
+      setGaps(gapMessages.slice(0, 50));
 
-      if (error) throw error;
-      setGaps(data || []);
-    } catch (error) {
-      console.error("Error fetching gaps:", error);
-    }
-  };
+      // Set other data
+      setSettings(allSettings);
+      setLeads(shopperLeads.map((l: any) => ({ ...l, contacted: l.contacted ?? false })));
+      setB2BInquiries(allB2B);
+      setPartners(allPartners);
 
-  const fetchSettings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("settings")
-        .select("*")
-        .order("setting_name");
-
-      if (error) throw error;
-      setSettings(data || []);
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-    }
-  };
-
-  const fetchLeads = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("id, name, email, phone, business_name, project_type, timeline, location, created_at, contacted")
-        .eq("intent", "shopping")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setLeads((data || []).map(l => ({ ...l, contacted: l.contacted ?? false })));
-    } catch (error) {
-      console.error("Error fetching leads:", error);
-    }
-  };
-
-  const fetchB2BInquiries = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("b2b_inquiries")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setB2BInquiries(data || []);
-    } catch (error) {
-      console.error("Error fetching B2B inquiries:", error);
-    }
-  };
-
-  const fetchPartners = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("partners")
-        .select("*")
-        .order("company_name");
-
-      if (error) throw error;
-      setPartners(data || []);
-    } catch (error) {
-      console.error("Error fetching partners:", error);
-    }
-  };
-
-  const fetchReferrals = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("referrals")
-        .select(`
-          *,
-          users (name, email),
-          partners (company_name)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      
-      const referralsWithDetails = (data || []).map((r: any) => ({
-        ...r,
-        user_name: r.users?.name,
-        user_email: r.users?.email,
-        partner_name: r.partners?.company_name,
-      }));
-      
+      // Process referrals with user/partner info
+      const referralsWithDetails = allReferrals.map((r: any) => {
+        const user = users.find((u: any) => u.id === r.user_id);
+        const partner = allPartners.find((p: any) => p.id === r.partner_id);
+        return {
+          ...r,
+          user_name: user?.name,
+          user_email: user?.email,
+          partner_name: partner?.company_name,
+        };
+      });
       setReferrals(referralsWithDetails);
     } catch (error) {
-      console.error("Error fetching referrals:", error);
+      console.error("Error fetching admin data:", error);
+      toast({ title: "Error", description: "Failed to load admin data", variant: "destructive" });
     }
+    setIsLoading(false);
   };
+
+  // Legacy fetch functions removed - all data now fetched via fetchAllData using edge function
 
   const updateSetting = async (id: string, value: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from("settings")
-        .update({ setting_value: value, is_active: isActive, updated_at: new Date().toISOString() })
-        .eq("id", id);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateSetting", data: { id, setting_value: value } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       toast({ description: "Setting updated successfully" });
-      fetchSettings();
+      setSettings(settings.map(s => s.id === id ? { ...s, setting_value: value, is_active: isActive } : s));
     } catch (error) {
       console.error("Error updating setting:", error);
       toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
@@ -447,10 +325,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const toggleLeadContacted = async (leadId: string, contacted: boolean) => {
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({ contacted })
-        .eq("id", leadId);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateUserContacted", data: { id: leadId, contacted } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       setLeads(leads.map(l => l.id === leadId ? { ...l, contacted } : l));
@@ -462,10 +340,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const updateB2BStatus = async (id: string, status: string) => {
     try {
-      const { error } = await supabase
-        .from("b2b_inquiries")
-        .update({ status })
-        .eq("id", id);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateB2BInquiry", data: { id, updates: { status } } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       setB2BInquiries(b2bInquiries.map(i => i.id === id ? { ...i, status } : i));
@@ -477,10 +355,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const updateB2BNotes = async (id: string, notes: string) => {
     try {
-      const { error } = await supabase
-        .from("b2b_inquiries")
-        .update({ notes })
-        .eq("id", id);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateB2BInquiry", data: { id, updates: { notes } } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       setB2BInquiries(b2bInquiries.map(i => i.id === id ? { ...i, notes } : i));
@@ -492,10 +370,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const updateReferralStatus = async (id: string, status: string) => {
     try {
-      const { error } = await supabase
-        .from("referrals")
-        .update({ status })
-        .eq("id", id);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateReferral", data: { id, updates: { status } } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       setReferrals(referrals.map(r => r.id === id ? { ...r, status } : r));
@@ -506,10 +384,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const updateReferralPartner = async (id: string, partnerId: string) => {
     try {
-      const { error } = await supabase
-        .from("referrals")
-        .update({ partner_id: partnerId })
-        .eq("id", id);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "updateReferral", data: { id, updates: { partner_id: partnerId } } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       const partner = partners.find(p => p.id === partnerId);
@@ -521,10 +399,10 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
 
   const togglePartnerActive = async (id: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from("partners")
-        .update({ is_active: isActive })
-        .eq("id", id);
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "togglePartner", data: { id, is_active: isActive } },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       setPartners(partners.map(p => p.id === id ? { ...p, is_active: isActive } : p));
@@ -537,25 +415,28 @@ const AdminDashboard = ({ onLogout }: AdminDashboardProps) => {
     if (!newPartner.company_name) return;
     
     try {
-      const { error } = await supabase
-        .from("partners")
-        .insert({
-          company_name: newPartner.company_name,
-          contact_name: newPartner.contact_name || null,
-          email: newPartner.email || null,
-          phone: newPartner.phone || null,
-          location_city: newPartner.location_city || null,
-          location_state: newPartner.location_state || null,
-          services: newPartner.services || null,
-          is_active: newPartner.is_active ?? true,
-          notes: newPartner.notes || null,
-        });
+      const partnerData = {
+        company_name: newPartner.company_name,
+        contact_name: newPartner.contact_name || null,
+        email: newPartner.email || null,
+        phone: newPartner.phone || null,
+        location_city: newPartner.location_city || null,
+        location_state: newPartner.location_state || null,
+        services: newPartner.services || null,
+        is_active: newPartner.is_active ?? true,
+        notes: newPartner.notes || null,
+      };
+
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "addPartner", data: partnerData },
+        headers: { "x-admin-token": adminToken },
+      });
 
       if (error) throw error;
       
       setShowPartnerDialog(false);
       setNewPartner({ company_name: "", is_active: true });
-      fetchPartners();
+      fetchAllData(); // Refresh all data
       toast({ description: "Partner added successfully" });
     } catch (error) {
       console.error("Error adding partner:", error);
