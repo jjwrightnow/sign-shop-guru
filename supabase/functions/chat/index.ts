@@ -29,13 +29,21 @@ function detectPatterns(messages: string[]): { shopper: number; owner: number; i
   return { shopper, owner, installer };
 }
 
-function getOffer(patterns: { shopper: number; owner: number; installer: number }, offersShown: string[], currentIntent: string): { offer: string; offerType: string } | null {
+function getOffer(patterns: { shopper: number; owner: number; installer: number }, offersShown: string[], currentIntent: string, currentExperienceLevel: string): { offer: string; offerType: string } | null {
+  // User is already identified as a shopper by experience level - don't offer shopper conversion
+  const isAlreadyShopper = currentIntent === 'shopping' || currentExperienceLevel === 'shopper';
+  
   // Don't offer shopper conversion if already a shopper
-  if (patterns.shopper >= 2 && currentIntent !== 'shopping' && !offersShown.includes('shopper')) {
+  if (patterns.shopper >= 2 && !isAlreadyShopper && !offersShown.includes('shopper')) {
     return {
       offer: "\n\n---\n💡 *It sounds like you might be looking to get a sign made. Would you like me to help connect you with a sign professional in your area?*",
       offerType: 'shopper'
     };
+  }
+  
+  // Don't offer owner/installer upgrades to shoppers
+  if (isAlreadyShopper) {
+    return null;
   }
   
   if (patterns.owner >= 2 && !offersShown.includes('owner')) {
@@ -227,28 +235,52 @@ serve(async (req) => {
 
     const systemPrompt = settings?.setting_value || 'You are SignMaker.ai, a helpful assistant for the sign industry. You help with signage and fabrication questions including channel letters, monument signs, materials, LED lighting, pricing, and installation.'
 
+    // Determine if user is a shopper (either by intent OR experience level selection)
+    const isShopperByIntent = user_context?.intent === 'shopping';
+    const isShopperByExperience = user_context?.experience_level === 'shopper';
+    const isShopperUser = isShopperByIntent || isShopperByExperience;
+
+    // Track message count for shopper referral offer
+    const messageCount = conversationMessages.length;
+
     // Special handling for shoppers (sign buyers)
-    const isShopperIntent = user_context?.intent === 'shopping';
-    const shopperGuidance = isShopperIntent ? `
+    const shopperGuidance = isShopperUser ? `
 
 SPECIAL GUIDANCE FOR SIGN BUYERS:
-This user is looking to purchase a sign, not a sign industry professional. Adapt your responses:
-- Be helpful but guide toward getting a quote from a professional sign company
-- Explain options in buyer-friendly terms, avoid fabricator jargon
-- After answering technical questions, consider offering: "Would you like help understanding what to ask sign companies for this project?"
-- Don't overwhelm with technical manufacturing details unless they specifically ask
-- Focus on: what they'll get, realistic timeline expectations, and questions to ask vendors
-- If discussing materials or options, explain the benefits from an end-user perspective` : '';
+This user is looking to purchase a sign, not a sign industry professional. They selected "${isShopperByExperience ? "I'm not in the sign industry — just need a sign" : "Shopping — I need a sign made"}". Adapt your responses:
+
+COMMUNICATION STYLE:
+- Use beginner-friendly language — NO industry jargon
+- Explain things simply, as you would to someone who has never bought a sign before
+- Focus on what they'll GET (the end result), not fabrication details
+- Use relatable comparisons (e.g., "like choosing between LED and fluorescent bulbs for your home")
+
+CONVERSATION APPROACH:
+- Be helpful and informative about their sign options
+- Answer their questions clearly without overwhelming technical details
+- Focus on: realistic budget ranges, timeline expectations, what makes a quality sign
+- Help them understand what questions to ask sign companies
+
+PROACTIVE REFERRAL (IMPORTANT):
+- After 2-3 helpful exchanges (${messageCount >= 3 ? 'NOW is a good time' : 'wait for more exchanges'}), offer to connect them with SignExperts.ai
+- Say something like: "Based on what you're looking for, I can help connect you with vetted sign professionals in your area through SignExperts.ai. Would that be helpful?"
+- Don't push too hard, but make it a natural suggestion after you've been helpful
+
+AVOID:
+- Technical manufacturing jargon (channel letters, raceway, routed faces, etc.) unless they ask
+- Overwhelming details about materials and processes
+- Assuming they know industry terminology` : '';
 
     const contextualPrompt = `${systemPrompt}
 
 USER CONTEXT:
 Name: ${user_context?.name || 'Unknown'}
-Experience Level: ${user_context?.experience_level || 'Unknown'}
+Experience Level: ${user_context?.experience_level || 'Unknown'}${isShopperByExperience ? ' (NOT a sign professional - just needs a sign made)' : ''}
 Intent: ${user_context?.intent || 'Unknown'}
+Message Count in Conversation: ${messageCount}
 ${shopperGuidance}
 
-Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.`
+${isShopperUser ? '' : 'Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.'}`
 
     console.log('Calling Claude API...')
 
@@ -283,7 +315,7 @@ Adapt your response based on their experience level and intent. For beginners, e
       const patterns = detectPatterns(conversationMessages);
       console.log('Detected patterns:', patterns);
       
-      const offer = getOffer(patterns, offersShown, user_context?.intent || '');
+      const offer = getOffer(patterns, offersShown, user_context?.intent || '', user_context?.experience_level || '');
       
       if (offer) {
         assistantResponse += offer.offer;

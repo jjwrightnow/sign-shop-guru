@@ -76,7 +76,8 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const isShopper = formData.intent === "shopping";
+  // User is treated as a shopper if they select "shopping" intent OR the "shopper" experience level
+  const isShopper = formData.intent === "shopping" || formData.experienceLevel === "shopper";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,6 +213,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
                 <SelectItem value="new">New to the industry</SelectItem>
                 <SelectItem value="1-3">1-3 years experience</SelectItem>
                 <SelectItem value="veteran">3+ years / Veteran</SelectItem>
+                <SelectItem value="shopper">I'm not in the sign industry — just need a sign</SelectItem>
               </SelectContent>
             </Select>
             {errors.experienceLevel && <p className="text-xs text-destructive">{errors.experienceLevel}</p>}
