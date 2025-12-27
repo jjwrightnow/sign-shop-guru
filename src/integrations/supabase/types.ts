@@ -14,20 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      b2b_inquiries: {
+        Row: {
+          company_name: string | null
+          contact_info: string | null
+          conversation_id: string | null
+          created_at: string | null
+          goals: string | null
+          id: string
+          interest_type: string | null
+          notes: string | null
+          role: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          company_name?: string | null
+          contact_info?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          goals?: string | null
+          id?: string
+          interest_type?: string | null
+          notes?: string | null
+          role?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          company_name?: string | null
+          contact_info?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          goals?: string | null
+          id?: string
+          interest_type?: string | null
+          notes?: string | null
+          role?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "b2b_inquiries_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "b2b_inquiries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string | null
+          detected_persona: string | null
           id: string
+          offers_shown: string[] | null
           user_id: string | null
         }
         Insert: {
           created_at?: string | null
+          detected_persona?: string | null
           id?: string
+          offers_shown?: string[] | null
           user_id?: string | null
         }
         Update: {
           created_at?: string | null
+          detected_persona?: string | null
           id?: string
+          offers_shown?: string[] | null
           user_id?: string | null
         }
         Relationships: [
@@ -100,6 +163,118 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partners: {
+        Row: {
+          company_name: string
+          contact_name: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          is_active: boolean | null
+          location_city: string | null
+          location_state: string | null
+          notes: string | null
+          phone: string | null
+          services: string[] | null
+        }
+        Insert: {
+          company_name: string
+          contact_name?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          location_city?: string | null
+          location_state?: string | null
+          notes?: string | null
+          phone?: string | null
+          services?: string[] | null
+        }
+        Update: {
+          company_name?: string
+          contact_name?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean | null
+          location_city?: string | null
+          location_state?: string | null
+          notes?: string | null
+          phone?: string | null
+          services?: string[] | null
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          best_time_to_call: string | null
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          location_city: string | null
+          location_state: string | null
+          notes: string | null
+          partner_id: string | null
+          phone: string | null
+          project_type: string | null
+          status: string | null
+          timeline: string | null
+          user_id: string | null
+        }
+        Insert: {
+          best_time_to_call?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          location_city?: string | null
+          location_state?: string | null
+          notes?: string | null
+          partner_id?: string | null
+          phone?: string | null
+          project_type?: string | null
+          status?: string | null
+          timeline?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          best_time_to_call?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          location_city?: string | null
+          location_state?: string | null
+          notes?: string | null
+          partner_id?: string | null
+          phone?: string | null
+          project_type?: string | null
+          status?: string | null
+          timeline?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referrals_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
