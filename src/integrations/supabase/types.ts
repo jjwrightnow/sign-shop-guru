@@ -73,24 +73,36 @@ export type Database = {
       }
       conversations: {
         Row: {
+          b2b_completed: boolean | null
+          b2b_pending: boolean | null
           created_at: string | null
           detected_persona: string | null
           id: string
           offers_shown: string[] | null
+          referral_completed: boolean | null
+          referral_pending: boolean | null
           user_id: string | null
         }
         Insert: {
+          b2b_completed?: boolean | null
+          b2b_pending?: boolean | null
           created_at?: string | null
           detected_persona?: string | null
           id?: string
           offers_shown?: string[] | null
+          referral_completed?: boolean | null
+          referral_pending?: boolean | null
           user_id?: string | null
         }
         Update: {
+          b2b_completed?: boolean | null
+          b2b_pending?: boolean | null
           created_at?: string | null
           detected_persona?: string | null
           id?: string
           offers_shown?: string[] | null
+          referral_completed?: boolean | null
+          referral_pending?: boolean | null
           user_id?: string | null
         }
         Relationships: [
