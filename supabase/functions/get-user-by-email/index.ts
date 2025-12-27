@@ -27,16 +27,20 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch user by email - only return non-sensitive fields
-    const { data: user, error } = await supabase
+    // Use order + limit instead of maybeSingle to handle duplicate emails gracefully
+    const { data: users, error } = await supabase
       .from('users')
       .select('id, name, experience_level, intent, phone')
       .eq('email', email)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .limit(1);
 
     if (error) {
       console.error('get-user-by-email: Error fetching user:', error);
       throw error;
     }
+
+    const user = users?.[0] || null;
 
     if (!user) {
       console.log('get-user-by-email: User not found:', email);
