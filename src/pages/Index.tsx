@@ -120,23 +120,28 @@ const Index = () => {
 
       if (error) throw error;
 
-      // Get first message for each conversation
+      // Get first message for each conversation via edge function
       const conversationsWithPreview = await Promise.all(
         (convos || []).map(async (conv) => {
-          const { data: messages } = await supabase
-            .from("messages")
-            .select("content, role")
-            .eq("conversation_id", conv.id)
-            .eq("role", "user")
-            .order("created_at", { ascending: true })
-            .limit(1);
-
-          return {
-            id: conv.id,
-            created_at: conv.created_at,
-            first_message: messages?.[0]?.content || "",
-            message_count: 0,
-          };
+          try {
+            const { data } = await supabase.functions.invoke("get-messages", {
+              body: { conversation_id: conv.id, user_id: userId },
+            });
+            const userMessages = (data?.messages || []).filter((m: any) => m.role === "user");
+            return {
+              id: conv.id,
+              created_at: conv.created_at,
+              first_message: userMessages[0]?.content || "",
+              message_count: data?.messages?.length || 0,
+            };
+          } catch {
+            return {
+              id: conv.id,
+              created_at: conv.created_at,
+              first_message: "",
+              message_count: 0,
+            };
+          }
         })
       );
 
@@ -150,23 +155,22 @@ const Index = () => {
 
   const loadConversationMessages = async (conversationId: string, userName: string) => {
     try {
-      const { data: dbMessages, error } = await supabase
-        .from("messages")
-        .select("id, content, role, created_at")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
+      const { data, error } = await supabase.functions.invoke("get-messages", {
+        body: { conversation_id: conversationId },
+      });
 
       if (error) throw error;
 
-      if (dbMessages && dbMessages.length > 0) {
-        const loadedMessages: Message[] = dbMessages.map((msg) => ({
+      const dbMessages = data?.messages || [];
+      if (dbMessages.length > 0) {
+        const loadedMessages: Message[] = dbMessages.map((msg: any) => ({
           id: msg.id,
           content: msg.content,
           isUser: msg.role === "user",
           dbId: msg.id,
         }));
         setMessages(loadedMessages);
-        setMessageCount(dbMessages.filter(m => m.role === "user").length);
+        setMessageCount(dbMessages.filter((m: any) => m.role === "user").length);
       } else {
         // No messages, show welcome
         const welcomeMessage = `Hey ${userName} — I help with signage and fabrication questions. What would you like to know?`;
@@ -271,16 +275,19 @@ const Index = () => {
 
       if (error) throw error;
 
-      // Get the latest message ID from the database for feedback
-      const { data: messagesData } = await supabase
-        .from("messages")
-        .select("id")
-        .eq("conversation_id", userData.conversationId)
-        .eq("role", "assistant")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const dbMessageId = messagesData?.[0]?.id;
+      // Get the latest message ID from the database for feedback via edge function
+      let dbMessageId: string | undefined;
+      try {
+        const { data: msgData } = await supabase.functions.invoke("get-messages", {
+          body: { conversation_id: userData.conversationId },
+        });
+        const assistantMsgs = (msgData?.messages || [])
+          .filter((m: any) => m.role === "assistant")
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        dbMessageId = assistantMsgs[0]?.id;
+      } catch (e) {
+        console.error("Error fetching message ID for feedback:", e);
+      }
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
