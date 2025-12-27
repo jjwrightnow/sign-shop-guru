@@ -22,6 +22,7 @@ interface UserData {
   name: string;
   experienceLevel: string;
   intent: string;
+  email: string;
 }
 
 interface ConversationData {
@@ -88,6 +89,7 @@ const Index = () => {
               name: user.name,
               experienceLevel: user.experience_level,
               intent: user.intent,
+              email: storedEmail,
             });
             
             // Load messages for this conversation
@@ -186,19 +188,10 @@ const Index = () => {
   };
 
   const handleIntakeComplete = async (data: UserData) => {
-    // Store email for returning user check
+    // Store email for returning user check - use email directly from form data
     const storedEmail = localStorage.getItem("signmaker_user_email");
-    if (!storedEmail) {
-      // Get the email from the user we just created
-      const { data: user } = await supabase
-        .from("users")
-        .select("email")
-        .eq("id", data.userId)
-        .single();
-      
-      if (user?.email) {
-        localStorage.setItem("signmaker_user_email", user.email);
-      }
+    if (!storedEmail && data.email) {
+      localStorage.setItem("signmaker_user_email", data.email);
     }
 
     setUserData(data);
