@@ -54,6 +54,8 @@ function extractReferralData(messages: { role: string; content: string }[]): {
   phone?: string;
   email?: string;
   best_time_to_call?: string;
+  preferred_contact?: string;
+  timezone?: string;
   notes?: string;
 } {
   const data: any = {};
@@ -74,7 +76,7 @@ function extractReferralData(messages: { role: string; content: string }[]): {
     }
   }
   
-  // Email pattern (check first as preferred contact method)
+  // Email pattern
   const emailMatch = allUserText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
   if (emailMatch) data.email = emailMatch[1];
   
@@ -109,15 +111,56 @@ function extractReferralData(messages: { role: string; content: string }[]): {
     }
   }
   
-  // Best time to call
+  // Best time to contact
   const timePatterns = [
-    /(?:best time|call me|reach me|contact me)\s*(?:is\s+)?(?:at\s+)?([^.!?\n]+(?:morning|afternoon|evening|am|pm|\d+)[^.!?\n]*)/i,
+    /(?:best time|call me|reach me|contact me|available)\s*(?:is\s+)?(?:at\s+)?([^.!?\n]+(?:morning|afternoon|evening|am|pm|\d+)[^.!?\n]*)/i,
     /(morning|afternoon|evening|anytime)/i
   ];
   for (const pattern of timePatterns) {
     const match = allUserText.match(pattern);
     if (match) {
       data.best_time_to_call = match[1]?.trim();
+      break;
+    }
+  }
+  
+  // Preferred contact method
+  const preferPhonePatterns = [
+    /prefer\s*(?:to\s+be\s+)?(?:contacted\s+)?(?:by\s+)?phone/i,
+    /(?:call|phone)\s*(?:is\s+)?(?:best|preferred|better)/i,
+    /rather\s+(?:be\s+)?called/i
+  ];
+  const preferEmailPatterns = [
+    /prefer\s*(?:to\s+be\s+)?(?:contacted\s+)?(?:by\s+)?email/i,
+    /email\s*(?:is\s+)?(?:best|preferred|better)/i,
+    /rather\s+(?:receive\s+)?(?:an\s+)?email/i
+  ];
+  
+  for (const pattern of preferPhonePatterns) {
+    if (pattern.test(allUserText)) {
+      data.preferred_contact = 'phone';
+      break;
+    }
+  }
+  if (!data.preferred_contact) {
+    for (const pattern of preferEmailPatterns) {
+      if (pattern.test(allUserText)) {
+        data.preferred_contact = 'email';
+        break;
+      }
+    }
+  }
+  
+  // Timezone patterns
+  const timezonePatterns = [
+    /(eastern|pacific|central|mountain)\s*(?:time|timezone|tz)?/i,
+    /(EST|PST|CST|MST|EDT|PDT|CDT|MDT)/i,
+    /(?:timezone|time zone|tz)\s*(?:is\s+)?([A-Za-z]+)/i
+  ];
+  for (const pattern of timezonePatterns) {
+    const match = allUserText.match(pattern);
+    if (match) {
+      data.timezone = match[1]?.trim().toUpperCase();
       break;
     }
   }
@@ -657,11 +700,20 @@ PROACTIVE REFERRAL:
 ${referralPending ? '- Referral form is IN PROGRESS - continue collecting their info' : ''}
 
 REFERRAL COLLECTION (when user says YES or asks for a recommendation):
-1. Include [REFERRAL_FORM] marker and ask:
-   "I'd be happy to connect you! Quick questions: What city/state? What type of sign? Timeline? And what's the best way to reach you - email or phone?"
-2. IMPORTANT: Ask for EMAIL FIRST as the preferred contact method. Only ask for phone if they prefer phone contact.
-3. If they provide email, that's sufficient. If they prefer phone, ask: "What's your phone number and best time to call?"
-4. After they provide contact info (email OR phone), include [REFERRAL_SUBMIT] marker and confirm:
+1. Include [REFERRAL_FORM] marker and collect info in this order:
+   - Location (city/state)
+   - What type of sign project
+   - Timeline
+   - Phone number
+   - How they prefer to be contacted: by email or phone?
+   - Best time to contact them
+   - Their timezone (if not already mentioned or obvious from location)
+   
+2. Example flow: "I'd be happy to connect you! What city and state are you in? What type of sign are you looking for? What's your timeline? And what's your phone number so a sign pro can reach you?"
+
+3. After they provide phone, follow up: "Great! Do you prefer to be contacted by email or phone? What time works best, and what timezone are you in?"
+
+4. After they provide all info, include [REFERRAL_SUBMIT] marker and confirm:
    "Perfect! A sign professional will reach out within 1 business day."
 ` : '';
 
@@ -755,10 +807,21 @@ MARKER RULES:
       const referralData = extractReferralData(fullConversationHistory);
       console.log('Extracted referral data:', referralData);
       
-      // Save to referrals table (include email in notes if provided separately)
-      const notesWithEmail = referralData.email && referralData.email !== userData?.email 
-        ? `Contact email: ${referralData.email}\n${referralData.notes || ''}`
-        : referralData.notes || null;
+      // Save to referrals table (include extra contact info in notes)
+      const extraNotes: string[] = [];
+      if (referralData.email && referralData.email !== userData?.email) {
+        extraNotes.push(`Contact email: ${referralData.email}`);
+      }
+      if (referralData.preferred_contact) {
+        extraNotes.push(`Preferred contact: ${referralData.preferred_contact}`);
+      }
+      if (referralData.timezone) {
+        extraNotes.push(`Timezone: ${referralData.timezone}`);
+      }
+      if (referralData.notes) {
+        extraNotes.push(referralData.notes);
+      }
+      const notesWithExtra = extraNotes.length > 0 ? extraNotes.join('\n') : null;
       
       const referralRecord = {
         user_id: conversation.user_id,
@@ -769,7 +832,7 @@ MARKER RULES:
         timeline: referralData.timeline || null,
         phone: referralData.phone || userData?.phone || null,
         best_time_to_call: referralData.best_time_to_call || null,
-        notes: notesWithEmail,
+        notes: notesWithExtra,
         status: 'new'
       };
       
@@ -787,7 +850,10 @@ MARKER RULES:
         // Determine best contact info to display
         const contactEmail = referralData.email || userData?.email || 'Not provided';
         const contactPhone = referralData.phone || userData?.phone || null;
-        const preferredContact = referralData.email ? 'Email' : (contactPhone ? 'Phone' : 'Email');
+        const preferredContact = referralData.preferred_contact 
+          ? referralData.preferred_contact.charAt(0).toUpperCase() + referralData.preferred_contact.slice(1)
+          : (contactPhone ? 'Phone' : 'Email');
+        const timezone = referralData.timezone || 'Not provided';
         
         // Send email notification to ask@signmaker.ai
         const timestamp = new Date().toISOString();
@@ -807,19 +873,21 @@ MARKER RULES:
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
                 <td style="padding: 8px 0;">${contactEmail}</td>
               </tr>
-              ${contactPhone ? `
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
-                <td style="padding: 8px 0;">${contactPhone}</td>
+                <td style="padding: 8px 0;">${contactPhone || 'Not provided'}</td>
               </tr>
               <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
+                <td style="padding: 8px 0; font-weight: bold; color: #666; background-color: #f0f9ff;">Preferred Contact:</td>
+                <td style="padding: 8px 0; background-color: #f0f9ff;"><strong>${preferredContact}</strong></td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time:</td>
                 <td style="padding: 8px 0;">${referralData.best_time_to_call || 'Not provided'}</td>
               </tr>
-              ` : ''}
               <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Preferred Contact:</td>
-                <td style="padding: 8px 0;"><strong>${preferredContact}</strong></td>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Timezone:</td>
+                <td style="padding: 8px 0;">${timezone}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Location:</td>
