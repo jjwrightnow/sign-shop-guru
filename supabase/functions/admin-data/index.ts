@@ -37,7 +37,8 @@ serve(async (req) => {
         settingsResult,
         b2bResult,
         partnersResult,
-        referralsResult
+        referralsResult,
+        signexpertsReferralsResult
       ] = await Promise.all([
         supabase.from('users').select('*').order('created_at', { ascending: false }),
         supabase.from('conversations').select('*').order('created_at', { ascending: false }),
@@ -46,7 +47,8 @@ serve(async (req) => {
         supabase.from('settings').select('*'),
         supabase.from('b2b_inquiries').select('*').order('created_at', { ascending: false }),
         supabase.from('partners').select('*').order('created_at', { ascending: false }),
-        supabase.from('referrals').select('*').order('created_at', { ascending: false })
+        supabase.from('referrals').select('*').order('created_at', { ascending: false }),
+        supabase.from('signexperts_referrals').select('*').order('created_at', { ascending: false })
       ])
 
       return new Response(
@@ -58,7 +60,8 @@ serve(async (req) => {
           settings: settingsResult.data || [],
           b2b_inquiries: b2bResult.data || [],
           partners: partnersResult.data || [],
-          referrals: referralsResult.data || []
+          referrals: referralsResult.data || [],
+          signexperts_referrals: signexpertsReferralsResult.data || []
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
