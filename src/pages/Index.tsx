@@ -6,6 +6,7 @@ import TypingIndicator from "@/components/TypingIndicator";
 import IntakeFormModal from "@/components/IntakeFormModal";
 import ConversationSidebar from "@/components/ConversationSidebar";
 import OptInPrompt from "@/components/OptInPrompt";
+import TrainMePanel from "@/components/TrainMePanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -42,6 +43,8 @@ const Index = () => {
   const [showOptIn, setShowOptIn] = useState(false);
   const [optInDismissed, setOptInDismissed] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
+  const [showTrainMe, setShowTrainMe] = useState(false);
+  const [isTrained, setIsTrained] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -95,6 +98,9 @@ const Index = () => {
             // Load messages for this conversation
             await loadConversationMessages(latestConvo.id, user.name);
             await loadUserConversations(user.id);
+            
+            // Check if user has training context
+            await checkUserTrainingStatus(user.id);
           }
         } catch (error) {
           console.error("Error checking returning user:", error);
@@ -104,6 +110,20 @@ const Index = () => {
 
     checkReturningUser();
   }, []);
+
+  // Check if user has saved training context
+  const checkUserTrainingStatus = async (userId: string) => {
+    try {
+      const { data } = await supabase.functions.invoke("user-context", {
+        body: { action: "get", user_id: userId },
+      });
+      if (data?.context && data.context.length > 0) {
+        setIsTrained(true);
+      }
+    } catch (error) {
+      console.error("Error checking training status:", error);
+    }
+  };
 
   // Show opt-in prompt after 5+ messages (10 messages = 5 exchanges)
   useEffect(() => {
@@ -318,22 +338,50 @@ const Index = () => {
     setOptInDismissed(true);
   };
 
+  const handleTrainMeClick = () => {
+    setShowTrainMe(true);
+  };
+
+  const handleTrainingComplete = () => {
+    setIsTrained(true);
+  };
+
+  // Check if user is a sign professional (not a shopper)
+  const isSignProfessional = userData && 
+    userData.experienceLevel !== 'shopper' && 
+    userData.intent !== 'shopping';
+
   return (
     <div className="flex min-h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
       
       {userData && (
-        <ConversationSidebar
-          conversations={conversations}
-          activeConversationId={userData.conversationId}
-          onSelectConversation={handleSelectConversation}
-          onNewChat={handleNewChat}
-          isLoading={isLoadingConversations}
-        />
+        <>
+          <ConversationSidebar
+            conversations={conversations}
+            activeConversationId={userData.conversationId}
+            onSelectConversation={handleSelectConversation}
+            onNewChat={handleNewChat}
+            isLoading={isLoadingConversations}
+          />
+          
+          {/* Train Me Panel - only for sign professionals */}
+          {isSignProfessional && (
+            <TrainMePanel
+              open={showTrainMe}
+              onClose={() => setShowTrainMe(false)}
+              userId={userData.userId}
+              onTrainingComplete={handleTrainingComplete}
+            />
+          )}
+        </>
       )}
 
       <div className="flex-1 flex flex-col">
-        <ChatHeader />
+        <ChatHeader 
+          onTrainMeClick={isSignProfessional ? handleTrainMeClick : undefined}
+          isTrained={isTrained}
+        />
         
         <main className="flex-1 overflow-y-auto">
           <div className="container max-w-4xl mx-auto py-6 px-4">

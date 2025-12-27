@@ -384,6 +384,44 @@ export type Database = {
         }
         Relationships: []
       }
+      user_context: {
+        Row: {
+          context_key: string
+          context_type: string
+          context_value: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          context_key: string
+          context_type: string
+          context_value: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          context_key?: string
+          context_type?: string
+          context_value?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_context_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           business_name: string | null
