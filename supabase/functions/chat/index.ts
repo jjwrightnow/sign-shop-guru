@@ -6,6 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;  // 1 minute
+const MAX_MESSAGES_PER_WINDOW = 10;  // 10 messages per minute per conversation
+const MIN_MESSAGE_INTERVAL_MS = 2000;  // 2 seconds between messages
+const MAX_QUESTION_LENGTH = 2000;  // Max characters for question
+
 // Pattern detection keywords
 const SHOPPER_PATTERNS = ['how much', 'cost', 'price', 'pricing', 'expensive', 'budget', 'how long', 'timeline', 'when can', 'find a', 'hire', 'recommend a', 'near me', 'in my area'];
 const OWNER_PATTERNS = ['train', 'training', 'staff', 'team', 'employees', 'sales tool', 'customer education', 'embed', 'white-label', 'api', 'integrate', 'business', 'pricing strategy', 'hiring', 'operations', 'my company', 'my shop'];
@@ -57,7 +63,37 @@ serve(async (req) => {
   try {
     const { question, user_context, conversation_id } = await req.json()
 
-    console.log('Received chat request:', { question, user_context, conversation_id })
+    console.log('Received chat request:', { question: question?.substring(0, 50), conversation_id })
+
+    // Input validation
+    if (!question || typeof question !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'Invalid message format' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const trimmedQuestion = question.trim();
+    if (trimmedQuestion.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Message cannot be empty' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (trimmedQuestion.length > MAX_QUESTION_LENGTH) {
+      return new Response(
+        JSON.stringify({ error: `Message must be less than ${MAX_QUESTION_LENGTH} characters` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!conversation_id) {
+      return new Response(
+        JSON.stringify({ error: 'conversation_id is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const CLAUDE_API_KEY = Deno.env.get('CLAUDE_API_KEY')
     if (!CLAUDE_API_KEY) {
@@ -67,6 +103,87 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Verify conversation exists and get user_id
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('user_id')
+      .eq('id', conversation_id)
+      .maybeSingle();
+
+    if (convError) {
+      console.error('Error verifying conversation:', convError);
+      throw convError;
+    }
+
+    if (!conversation) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid conversation' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify user exists
+    if (conversation.user_id) {
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', conversation.user_id)
+        .maybeSingle();
+
+      if (!user || userError) {
+        console.log('User not found for conversation');
+        return new Response(
+          JSON.stringify({ error: 'Invalid user' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // Rate limiting check
+    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+    
+    const { data: recentMessages, error: rateError } = await supabase
+      .from('messages')
+      .select('created_at')
+      .eq('conversation_id', conversation_id)
+      .eq('role', 'user')
+      .gte('created_at', windowStart)
+      .order('created_at', { ascending: false });
+
+    if (rateError) {
+      console.error('Rate limit check error:', rateError);
+      throw rateError;
+    }
+
+    if (recentMessages && recentMessages.length >= MAX_MESSAGES_PER_WINDOW) {
+      console.log('Rate limit exceeded for conversation:', conversation_id);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Rate limit exceeded. Please wait a moment before sending more messages.',
+          retryAfter: 60
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Retry-After': '60', 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check minimum interval between messages
+    if (recentMessages && recentMessages.length > 0) {
+      const lastMessageTime = new Date(recentMessages[0].created_at).getTime();
+      const timeSinceLastMessage = Date.now() - lastMessageTime;
+      
+      if (timeSinceLastMessage < MIN_MESSAGE_INTERVAL_MS) {
+        const retryAfter = Math.ceil((MIN_MESSAGE_INTERVAL_MS - timeSinceLastMessage) / 1000);
+        console.log('Message sent too quickly, retry after:', retryAfter);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Please wait a moment between messages.',
+            retryAfter
+          }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Fetch conversation history and metadata
     let conversationMessages: string[] = [];
