@@ -495,6 +495,7 @@ const Index = () => {
               {showOptIn && userData && !isTyping && (
                 <OptInPrompt
                   userId={userData.userId}
+                  conversationId={userData.conversationId}
                   onDismiss={handleOptInDismiss}
                   onComplete={handleOptInComplete}
                 />

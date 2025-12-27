@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_sessions: {
+        Row: {
+          created_at: string | null
+          expires_at: string
+          last_accessed_at: string | null
+          token: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at: string
+          last_accessed_at?: string | null
+          token?: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string
+          last_accessed_at?: string | null
+          token?: string
+        }
+        Relationships: []
+      }
       b2b_inquiries: {
         Row: {
           company_name: string | null

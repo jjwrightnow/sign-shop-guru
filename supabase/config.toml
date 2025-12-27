@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.send-transcript]
 verify_jwt = false
+
+[functions.update-user-phone]
+verify_jwt = false

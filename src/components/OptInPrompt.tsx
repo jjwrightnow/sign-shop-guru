@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Mail, Phone, X } from "lucide-react";
+import { Phone, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface OptInPromptProps {
   userId: string;
+  conversationId: string;
   onDismiss: () => void;
   onComplete: () => void;
 }
 
-const OptInPrompt = ({ userId, onDismiss, onComplete }: OptInPromptProps) => {
+const OptInPrompt = ({ userId, conversationId, onDismiss, onComplete }: OptInPromptProps) => {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [phone, setPhone] = useState("");
@@ -28,14 +28,30 @@ const OptInPrompt = ({ userId, onDismiss, onComplete }: OptInPromptProps) => {
       return;
     }
 
+    // Basic phone validation
+    const cleanPhone = phone.trim();
+    if (cleanPhone.length < 7 || cleanPhone.length > 20) {
+      toast({
+        title: "Invalid phone number",
+        description: "Please enter a valid phone number.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from("users")
-        .update({ phone: phone.trim() })
-        .eq("id", userId);
+      // Use edge function for secure phone update with authorization check
+      const { data, error } = await supabase.functions.invoke("update-user-phone", {
+        body: {
+          user_id: userId,
+          phone: cleanPhone,
+          conversation_id: conversationId,
+        },
+      });
 
       if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Failed to save");
 
       toast({
         description: "Thanks! We'll be in touch soon.",
@@ -116,6 +132,7 @@ const OptInPrompt = ({ userId, onDismiss, onComplete }: OptInPromptProps) => {
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           className="bg-muted border-border flex-1"
+          maxLength={20}
         />
         <Button
           onClick={handleOptIn}

@@ -13,26 +13,40 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session
-    const storedSession = localStorage.getItem(ADMIN_SESSION_KEY);
-    if (storedSession) {
-      try {
-        const session = JSON.parse(storedSession);
-        if (session.token && session.expiresAt) {
-          const expiryDate = new Date(session.expiresAt);
-          if (expiryDate > new Date()) {
-            setSessionToken(session.token);
-            setIsAuthenticated(true);
-          } else {
-            // Session expired
-            localStorage.removeItem(ADMIN_SESSION_KEY);
+    // Check for existing session - use sessionStorage for better security
+    const checkSession = async () => {
+      const storedSession = sessionStorage.getItem(ADMIN_SESSION_KEY);
+      if (storedSession) {
+        try {
+          const session = JSON.parse(storedSession);
+          if (session.token && session.expiresAt) {
+            const expiryDate = new Date(session.expiresAt);
+            if (expiryDate > new Date()) {
+              // Validate session with server
+              const { data, error } = await supabase.functions.invoke("admin-auth", {
+                body: { action: "validate", sessionToken: session.token },
+              });
+
+              if (!error && data?.valid) {
+                setSessionToken(session.token);
+                setIsAuthenticated(true);
+              } else {
+                // Session invalid on server, clear local storage
+                sessionStorage.removeItem(ADMIN_SESSION_KEY);
+              }
+            } else {
+              // Session expired
+              sessionStorage.removeItem(ADMIN_SESSION_KEY);
+            }
           }
+        } catch {
+          sessionStorage.removeItem(ADMIN_SESSION_KEY);
         }
-      } catch {
-        localStorage.removeItem(ADMIN_SESSION_KEY);
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    checkSession();
   }, []);
 
   const handleLogin = async (password: string) => {
@@ -44,8 +58,8 @@ const Admin = () => {
       if (error) throw error;
 
       if (data?.success) {
-        // Store session securely
-        localStorage.setItem(
+        // Store session in sessionStorage (cleared when browser closes)
+        sessionStorage.setItem(
           ADMIN_SESSION_KEY,
           JSON.stringify({
             token: data.sessionToken,
@@ -72,8 +86,19 @@ const Admin = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(ADMIN_SESSION_KEY);
+  const handleLogout = async () => {
+    // Invalidate session on server
+    if (sessionToken) {
+      try {
+        await supabase.functions.invoke("admin-auth", {
+          body: { action: "logout", sessionToken },
+        });
+      } catch (error) {
+        console.error("Logout error:", error);
+      }
+    }
+    
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
     setSessionToken(null);
     setIsAuthenticated(false);
   };

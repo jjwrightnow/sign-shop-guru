@@ -2,9 +2,23 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { Resend } from "https://esm.sh/resend@2.0.0"
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token',
+// Allowed origins for CORS - restrict to specific domains
+const ALLOWED_ORIGINS = [
+  'https://pahsxfzernyylrgfxcmp.lovable.app',
+  'http://localhost:8080',
+  'http://localhost:5173',
+]
+
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  const allowedOrigin = origin && ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : ALLOWED_ORIGINS[0]
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token',
+    'Access-Control-Allow-Credentials': 'true',
+  }
 }
 
 // Email notification helper
@@ -37,23 +51,56 @@ async function sendNotificationEmail(
 }
 
 serve(async (req) => {
+  const origin = req.headers.get('origin')
+  const corsHeaders = getCorsHeaders(origin)
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Validate admin session token
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Validate admin session token against database
     const adminToken = req.headers.get('x-admin-token')
-    if (!adminToken || adminToken.length !== 36) {
+    if (!adminToken || typeof adminToken !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    // Check if session exists in database and is not expired
+    const { data: session, error: sessionError } = await supabase
+      .from('admin_sessions')
+      .select('token, expires_at')
+      .eq('token', adminToken)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError) {
+      console.error('Error validating admin session:', sessionError)
+      return new Response(
+        JSON.stringify({ error: 'Session validation failed' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!session) {
+      console.warn('Invalid or expired admin session token')
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - invalid or expired session' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Update last accessed time
+    await supabase
+      .from('admin_sessions')
+      .update({ last_accessed_at: new Date().toISOString() })
+      .eq('token', adminToken)
 
     const { action, data } = await req.json()
 
@@ -437,6 +484,8 @@ serve(async (req) => {
     )
 
   } catch (error: unknown) {
+    const origin = req.headers.get('origin')
+    const corsHeaders = getCorsHeaders(origin)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     console.error('Admin data error:', error)
     return new Response(
