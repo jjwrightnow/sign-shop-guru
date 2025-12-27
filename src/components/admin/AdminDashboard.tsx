@@ -24,6 +24,9 @@ import {
   MousePointerClick,
   Edit,
   Check,
+  FlaskConical,
+  Trash2,
+  Copy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -180,8 +183,21 @@ interface SuggestedFollowup {
   followup_questions: string[];
   success_rate: number | null;
   usage_count: number;
+  click_count: number;
+  impression_count: number;
+  variant_group: string;
   is_active: boolean;
   created_at: string;
+}
+
+interface ABTestResult {
+  id: string;
+  variant_group: string;
+  followup_questions: string[];
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  is_active: boolean;
 }
 
 interface KnowledgeGap {
@@ -251,6 +267,9 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
   const [conversationPatterns, setConversationPatterns] = useState<ConversationPattern[]>([]);
   const [editingFollowup, setEditingFollowup] = useState<string | null>(null);
   const [editingGapResolution, setEditingGapResolution] = useState<string | null>(null);
+  const [abTestResults, setABTestResults] = useState<Record<string, ABTestResult[]>>({});
+  const [showCreateVariant, setShowCreateVariant] = useState<string | null>(null);
+  const [newVariantQuestions, setNewVariantQuestions] = useState<string>("");
 
   useEffect(() => {
     fetchAllData();
@@ -603,6 +622,69 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
       console.error("Error deleting gap:", error);
     }
   };
+
+  const fetchABTestResults = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "getABTestResults" },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      if (data?.results) {
+        setABTestResults(data.results);
+      }
+    } catch (error) {
+      console.error("Error fetching A/B test results:", error);
+    }
+  };
+
+  const createVariant = async (originalId: string, newQuestions: string[]) => {
+    try {
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { 
+          action: "createVariant", 
+          data: { 
+            original_id: originalId, 
+            new_questions: newQuestions,
+            variant_name: `variant_${Date.now()}` 
+          } 
+        },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      toast({ description: "Variant created successfully" });
+      setShowCreateVariant(null);
+      setNewVariantQuestions("");
+      fetchAllData();
+      fetchABTestResults();
+    } catch (error) {
+      console.error("Error creating variant:", error);
+      toast({ title: "Error", description: "Failed to create variant", variant: "destructive" });
+    }
+  };
+
+  const deleteVariant = async (id: string) => {
+    try {
+      const { error } = await supabase.functions.invoke("admin-data", {
+        body: { action: "deleteVariant", data: { id } },
+        headers: { "x-admin-token": adminToken },
+      });
+
+      if (error) throw error;
+      toast({ description: "Variant deleted" });
+      fetchAllData();
+      fetchABTestResults();
+    } catch (error) {
+      console.error("Error deleting variant:", error);
+      toast({ title: "Error", description: "Failed to delete variant", variant: "destructive" });
+    }
+  };
+
+  useEffect(() => {
+    fetchABTestResults();
+  }, [suggestedFollowups]);
 
   const exportLeadsToCSV = () => {
     const headers = ["Name", "Email", "Phone", "Business", "Project Type", "Timeline", "Location", "Date", "Contacted"];
@@ -1093,7 +1175,7 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                 </div>
 
                 {/* Stats Row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="bg-card border border-border rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <MousePointerClick className="w-4 h-4 text-primary" />
@@ -1106,10 +1188,19 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                   <div className="bg-card border border-border rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <TrendingUp className="w-4 h-4 text-primary" />
-                      <span className="text-xs text-muted-foreground">Total Follow-up Uses</span>
+                      <span className="text-xs text-muted-foreground">Total Impressions</span>
                     </div>
                     <span className="text-2xl font-bold text-foreground">
-                      {suggestedFollowups.reduce((sum, f) => sum + (f.usage_count || 0), 0)}
+                      {suggestedFollowups.reduce((sum, f) => sum + (f.impression_count || 0), 0)}
+                    </span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MousePointerClick className="w-4 h-4 text-green-500" />
+                      <span className="text-xs text-muted-foreground">Total Clicks</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">
+                      {suggestedFollowups.reduce((sum, f) => sum + (f.click_count || 0), 0)}
                     </span>
                   </div>
                   <div className="bg-card border border-border rounded-lg p-4">
@@ -1123,11 +1214,13 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                   </div>
                   <div className="bg-card border border-border rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <Check className="w-4 h-4 text-green-500" />
-                      <span className="text-xs text-muted-foreground">Resolved Gaps</span>
+                      <FlaskConical className="w-4 h-4 text-purple-500" />
+                      <span className="text-xs text-muted-foreground">A/B Tests</span>
                     </div>
                     <span className="text-2xl font-bold text-foreground">
-                      {knowledgeGaps.filter(g => g.resolved).length}
+                      {Object.keys(abTestResults).filter(cat => 
+                        abTestResults[cat]?.length > 1
+                      ).length}
                     </span>
                   </div>
                 </div>
@@ -1144,28 +1237,56 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                         <p className="text-muted-foreground text-sm">No follow-up suggestions configured.</p>
                       ) : (
                         <div className="space-y-3">
-                          {suggestedFollowups.map((followup) => (
+                          {suggestedFollowups.map((followup) => {
+                            const impressions = followup.impression_count || 0;
+                            const clicks = followup.click_count || 0;
+                            const ctr = impressions > 0 ? (clicks / impressions * 100).toFixed(1) : "0.0";
+                            const variantLabel = followup.variant_group || 'control';
+                            const hasVariants = suggestedFollowups.some(f => 
+                              f.category === followup.category && f.id !== followup.id
+                            );
+                            
+                            return (
                             <div
                               key={followup.id}
-                              className={`border rounded-lg p-3 ${followup.is_active ? "border-border" : "border-border opacity-60"}`}
+                              className={`border rounded-lg p-3 ${followup.is_active ? "border-border" : "border-border opacity-60"} ${variantLabel !== 'control' ? "border-l-4 border-l-purple-500" : ""}`}
                             >
                               <div className="flex items-start justify-between mb-2">
-                                <div>
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs px-2 py-0.5 bg-primary/20 text-primary rounded-full">
                                     {followup.category}
                                   </span>
-                                  <span className="text-xs text-muted-foreground ml-2">
-                                    {followup.usage_count || 0} uses
-                                  </span>
+                                  {variantLabel !== 'control' && (
+                                    <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full flex items-center gap-1">
+                                      <FlaskConical className="w-3 h-3" />
+                                      {variantLabel}
+                                    </span>
+                                  )}
+                                  {hasVariants && variantLabel === 'control' && (
+                                    <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">
+                                      control
+                                    </span>
+                                  )}
                                 </div>
                                 <Switch
                                   checked={followup.is_active}
                                   onCheckedChange={(checked) => toggleFollowup(followup.id, checked)}
                                 />
                               </div>
+                              
+                              {/* Stats row */}
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground mb-2">
+                                <span>{impressions} impressions</span>
+                                <span>{clicks} clicks</span>
+                                <span className={`font-medium ${parseFloat(ctr) > 5 ? "text-green-400" : parseFloat(ctr) > 2 ? "text-yellow-400" : "text-muted-foreground"}`}>
+                                  {ctr}% CTR
+                                </span>
+                              </div>
+                              
                               <div className="text-xs text-muted-foreground mb-2">
                                 Keywords: {followup.trigger_keywords?.join(", ")}
                               </div>
+                              
                               {editingFollowup === followup.id ? (
                                 <div className="space-y-2">
                                   <Textarea
@@ -1196,6 +1317,41 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                                     </Button>
                                   </div>
                                 </div>
+                              ) : showCreateVariant === followup.id ? (
+                                <div className="space-y-2 mt-2 p-2 bg-purple-500/10 rounded border border-purple-500/30">
+                                  <Label className="text-xs text-purple-400">Create A/B Test Variant</Label>
+                                  <Textarea
+                                    value={newVariantQuestions}
+                                    onChange={(e) => setNewVariantQuestions(e.target.value)}
+                                    className="bg-muted border-border text-sm min-h-[80px]"
+                                    placeholder="Enter alternative questions (one per line)"
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="bg-purple-500 hover:bg-purple-600"
+                                      onClick={() => {
+                                        const questions = newVariantQuestions.split("\n").filter(q => q.trim());
+                                        if (questions.length > 0) {
+                                          createVariant(followup.id, questions);
+                                        }
+                                      }}
+                                    >
+                                      <FlaskConical className="w-3 h-3 mr-1" />
+                                      Create Variant
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setShowCreateVariant(null);
+                                        setNewVariantQuestions("");
+                                      }}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
                               ) : (
                                 <div>
                                   <ul className="text-sm space-y-1">
@@ -1203,19 +1359,47 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                                       <li key={i} className="text-foreground">→ {q}</li>
                                     ))}
                                   </ul>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="mt-2 h-7 text-xs"
-                                    onClick={() => setEditingFollowup(followup.id)}
-                                  >
-                                    <Edit className="w-3 h-3 mr-1" />
-                                    Edit
-                                  </Button>
+                                  <div className="flex gap-2 mt-2 flex-wrap">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 text-xs"
+                                      onClick={() => setEditingFollowup(followup.id)}
+                                    >
+                                      <Edit className="w-3 h-3 mr-1" />
+                                      Edit
+                                    </Button>
+                                    {variantLabel === 'control' && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs text-purple-400 hover:text-purple-300"
+                                        onClick={() => {
+                                          setShowCreateVariant(followup.id);
+                                          setNewVariantQuestions(followup.followup_questions?.join("\n") || "");
+                                        }}
+                                      >
+                                        <Copy className="w-3 h-3 mr-1" />
+                                        Create A/B Variant
+                                      </Button>
+                                    )}
+                                    {variantLabel !== 'control' && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs text-red-400 hover:text-red-300"
+                                        onClick={() => deleteVariant(followup.id)}
+                                      >
+                                        <Trash2 className="w-3 h-3 mr-1" />
+                                        Delete Variant
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </ScrollArea>

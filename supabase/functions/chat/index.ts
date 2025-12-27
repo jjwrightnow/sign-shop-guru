@@ -645,27 +645,67 @@ serve(async (req) => {
 
     const systemPrompt = settings?.setting_value || 'You are SignMaker.ai, a helpful assistant for the sign industry. You help with signage and fabrication questions including channel letters, monument signs, materials, LED lighting, pricing, and installation.'
 
-    // Fetch suggested follow-ups based on question keywords
+    // Fetch suggested follow-ups based on question keywords with A/B testing
     const questionLower = trimmedQuestion.toLowerCase();
     let followupContext = '';
+    let selectedFollowupId: string | null = null;
+    let selectedVariant: string = 'control';
     
     const { data: followups } = await supabase
       .from('suggested_followups')
-      .select('trigger_keywords, followup_questions, category')
+      .select('id, trigger_keywords, followup_questions, category, variant_group, usage_count, impression_count')
       .eq('is_active', true);
     
     if (followups) {
-      const matchedFollowup = followups.find(f => 
+      // Find all matching followups (could have multiple variants)
+      const matchedFollowups = followups.filter(f => 
         f.trigger_keywords?.some((kw: string) => questionLower.includes(kw.toLowerCase()))
       );
       
+      let matchedFollowup = null;
+      
+      if (matchedFollowups.length > 0) {
+        // Group by category to find variants
+        const categories = [...new Set(matchedFollowups.map(f => f.category))];
+        
+        for (const category of categories) {
+          const variants = matchedFollowups.filter(f => f.category === category);
+          
+          if (variants.length > 1) {
+            // A/B test: randomly select a variant (weighted by variant_group)
+            const controlVariant = variants.find(v => v.variant_group === 'control');
+            const testVariants = variants.filter(v => v.variant_group !== 'control');
+            
+            // 50/50 split between control and test variants
+            if (Math.random() < 0.5 && controlVariant) {
+              matchedFollowup = controlVariant;
+            } else if (testVariants.length > 0) {
+              // Random selection among test variants
+              matchedFollowup = testVariants[Math.floor(Math.random() * testVariants.length)];
+            } else {
+              matchedFollowup = controlVariant;
+            }
+          } else {
+            matchedFollowup = variants[0];
+          }
+          
+          if (matchedFollowup) break;
+        }
+      }
+      
       if (matchedFollowup) {
+        selectedFollowupId = matchedFollowup.id;
+        selectedVariant = matchedFollowup.variant_group || 'control';
+        
         followupContext = `\n\nSUGGESTED FOLLOW-UPS FOR THIS TOPIC (${matchedFollowup.category}):\n${matchedFollowup.followup_questions.map((q: string) => `→ ${q}`).join('\n')}\n\nInclude 2-3 of these as clickable options at the end of your response, formatted as:\n→ [Question]`;
         
-        // Update usage count for this followup
+        // Update usage count and impression count
         await supabase.from('suggested_followups')
-          .update({ usage_count: (matchedFollowup as any).usage_count + 1 || 1 })
-          .eq('category', matchedFollowup.category);
+          .update({ 
+            usage_count: (matchedFollowup.usage_count || 0) + 1,
+            impression_count: (matchedFollowup.impression_count || 0) + 1 
+          })
+          .eq('id', matchedFollowup.id);
       } else {
         followupContext = '\n\nEnd your response with 2-3 relevant follow-up questions formatted as:\n→ [Question]';
       }

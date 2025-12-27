@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.update-user-phone]
 verify_jwt = false
+
+[functions.track-followup-click]
+verify_jwt = false
