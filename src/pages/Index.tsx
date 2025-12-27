@@ -373,6 +373,16 @@ const Index = () => {
     setIsTrained(true);
   };
 
+  const handleForgetMe = () => {
+    localStorage.removeItem("signmaker_user_email");
+    setUserData(null);
+    setMessages([]);
+    setConversations([]);
+    toast({
+      description: "Done. You'll see the signup form next time.",
+    });
+  };
+
   // Check if user is a sign professional (not a shopper)
   const isSignProfessional = userData && 
     userData.experienceLevel !== 'shopper' && 
@@ -408,6 +418,7 @@ const Index = () => {
         <ChatHeader 
           onTrainMeClick={isSignProfessional ? handleTrainMeClick : undefined}
           isTrained={isTrained}
+          onForgetMe={userData ? handleForgetMe : undefined}
         />
         
         <main className="flex-1 overflow-y-auto">
