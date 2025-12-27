@@ -213,6 +213,44 @@ export type Database = {
           },
         ]
       }
+      followup_clicks: {
+        Row: {
+          clicked_question: string
+          conversation_id: string | null
+          created_at: string | null
+          followup_id: string | null
+          id: string
+          user_id: string | null
+          variant_group: string | null
+        }
+        Insert: {
+          clicked_question: string
+          conversation_id?: string | null
+          created_at?: string | null
+          followup_id?: string | null
+          id?: string
+          user_id?: string | null
+          variant_group?: string | null
+        }
+        Update: {
+          clicked_question?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          followup_id?: string | null
+          id?: string
+          user_id?: string | null
+          variant_group?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_clicks_followup_id_fkey"
+            columns: ["followup_id"]
+            isOneToOne: false
+            referencedRelation: "suggested_followups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_gaps: {
         Row: {
           created_at: string | null
@@ -465,33 +503,42 @@ export type Database = {
       suggested_followups: {
         Row: {
           category: string | null
+          click_count: number | null
           created_at: string | null
           followup_questions: string[] | null
           id: string
+          impression_count: number | null
           is_active: boolean | null
           success_rate: number | null
           trigger_keywords: string[] | null
           usage_count: number | null
+          variant_group: string | null
         }
         Insert: {
           category?: string | null
+          click_count?: number | null
           created_at?: string | null
           followup_questions?: string[] | null
           id?: string
+          impression_count?: number | null
           is_active?: boolean | null
           success_rate?: number | null
           trigger_keywords?: string[] | null
           usage_count?: number | null
+          variant_group?: string | null
         }
         Update: {
           category?: string | null
+          click_count?: number | null
           created_at?: string | null
           followup_questions?: string[] | null
           id?: string
+          impression_count?: number | null
           is_active?: boolean | null
           success_rate?: number | null
           trigger_keywords?: string[] | null
           usage_count?: number | null
+          variant_group?: string | null
         }
         Relationships: []
       }

@@ -560,6 +560,115 @@ serve(async (req) => {
       )
     }
 
+    // Create A/B test variant
+    if (action === 'createVariant') {
+      const { original_id, new_questions, variant_name } = data
+      
+      // Get the original followup
+      const { data: original, error: fetchError } = await supabase
+        .from('suggested_followups')
+        .select('*')
+        .eq('id', original_id)
+        .single()
+      
+      if (fetchError || !original) {
+        return new Response(
+          JSON.stringify({ error: 'Original followup not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      // Create the variant
+      const { error: insertError, data: newVariant } = await supabase
+        .from('suggested_followups')
+        .insert({
+          trigger_keywords: original.trigger_keywords,
+          category: original.category,
+          followup_questions: new_questions,
+          variant_group: variant_name || 'variant_b',
+          is_active: true,
+          usage_count: 0,
+          click_count: 0,
+          impression_count: 0,
+        })
+        .select()
+        .single()
+      
+      if (insertError) throw insertError
+      
+      // Mark original as control if not already
+      if (original.variant_group !== 'control') {
+        await supabase
+          .from('suggested_followups')
+          .update({ variant_group: 'control' })
+          .eq('id', original_id)
+      }
+      
+      return new Response(
+        JSON.stringify({ success: true, data: newVariant }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Get A/B test results
+    if (action === 'getABTestResults') {
+      // Fetch all followups with their stats
+      const { data: allFollowups } = await supabase
+        .from('suggested_followups')
+        .select('id, category, variant_group, followup_questions, usage_count, click_count, impression_count, is_active')
+        .order('category')
+      
+      // Fetch click data for more detailed analysis
+      const { data: clickData } = await supabase
+        .from('followup_clicks')
+        .select('followup_id, variant_group, created_at')
+        .order('created_at', { ascending: false })
+        .limit(1000)
+      
+      // Group by category and calculate CTR
+      const results: Record<string, any[]> = {}
+      
+      allFollowups?.forEach(f => {
+        if (!results[f.category]) {
+          results[f.category] = []
+        }
+        
+        const impressions = f.impression_count || 0
+        const clicks = f.click_count || 0
+        const ctr = impressions > 0 ? (clicks / impressions * 100).toFixed(2) : '0.00'
+        
+        results[f.category].push({
+          id: f.id,
+          variant_group: f.variant_group || 'control',
+          followup_questions: f.followup_questions,
+          impressions,
+          clicks,
+          ctr: parseFloat(ctr),
+          is_active: f.is_active,
+        })
+      })
+      
+      return new Response(
+        JSON.stringify({ success: true, results, click_data: clickData }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Delete variant
+    if (action === 'deleteVariant') {
+      const { id } = data
+      const { error } = await supabase
+        .from('suggested_followups')
+        .delete()
+        .eq('id', id)
+      
+      if (error) throw error
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
       JSON.stringify({ error: 'Invalid action' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
