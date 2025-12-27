@@ -130,30 +130,48 @@ export type Database = {
       }
       users: {
         Row: {
+          business_name: string | null
+          contacted: boolean | null
           created_at: string | null
           email: string
           experience_level: string
           id: string
           intent: string
+          location: string | null
           name: string
+          phone: string | null
+          project_type: string | null
+          timeline: string | null
           tos_accepted: boolean | null
         }
         Insert: {
+          business_name?: string | null
+          contacted?: boolean | null
           created_at?: string | null
           email: string
           experience_level: string
           id?: string
           intent: string
+          location?: string | null
           name: string
+          phone?: string | null
+          project_type?: string | null
+          timeline?: string | null
           tos_accepted?: boolean | null
         }
         Update: {
+          business_name?: string | null
+          contacted?: boolean | null
           created_at?: string | null
           email?: string
           experience_level?: string
           id?: string
           intent?: string
+          location?: string | null
           name?: string
+          phone?: string | null
+          project_type?: string | null
+          timeline?: string | null
           tos_accepted?: boolean | null
         }
         Relationships: []

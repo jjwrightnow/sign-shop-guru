@@ -22,12 +22,29 @@ import { Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+const US_STATES = [
+  "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+  "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
+  "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
+  "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+  "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
+  "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+  "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
+  "Wisconsin", "Wyoming"
+];
+
 const formSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
   email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
   experienceLevel: z.string().min(1, "Please select your experience level"),
   intent: z.string().min(1, "Please select what brings you here"),
   tosAccepted: z.literal(true, { errorMap: () => ({ message: "You must accept the Terms of Service" }) }),
+  // Optional fields for shoppers
+  businessName: z.string().max(200).optional(),
+  projectType: z.string().optional(),
+  timeline: z.string().optional(),
+  location: z.string().optional(),
+  phone: z.string().max(20).optional(),
 });
 
 interface IntakeFormModalProps {
@@ -50,8 +67,15 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
     experienceLevel: "",
     intent: "",
     tosAccepted: false,
+    businessName: "",
+    projectType: "",
+    timeline: "",
+    location: "",
+    phone: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const isShopper = formData.intent === "shopping";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,16 +96,26 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
     setIsLoading(true);
 
     try {
-      // Insert user
-      const { data: userData, error: userError } = await supabase
+      // Insert user with additional fields for shoppers
+      const userData: any = {
+        name: formData.name,
+        email: formData.email,
+        experience_level: formData.experienceLevel,
+        intent: formData.intent,
+        tos_accepted: formData.tosAccepted,
+      };
+
+      if (isShopper) {
+        userData.business_name = formData.businessName || null;
+        userData.project_type = formData.projectType || null;
+        userData.timeline = formData.timeline || null;
+        userData.location = formData.location || null;
+        userData.phone = formData.phone || null;
+      }
+
+      const { data: userDataResult, error: userError } = await supabase
         .from("users")
-        .insert({
-          name: formData.name,
-          email: formData.email,
-          experience_level: formData.experienceLevel,
-          intent: formData.intent,
-          tos_accepted: formData.tosAccepted,
-        })
+        .insert(userData)
         .select()
         .single();
 
@@ -91,7 +125,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
       const { data: conversationData, error: conversationError } = await supabase
         .from("conversations")
         .insert({
-          user_id: userData.id,
+          user_id: userDataResult.id,
         })
         .select()
         .single();
@@ -99,7 +133,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
       if (conversationError) throw conversationError;
 
       onComplete({
-        userId: userData.id,
+        userId: userDataResult.id,
         conversationId: conversationData.id,
         name: formData.name,
         experienceLevel: formData.experienceLevel,
@@ -119,7 +153,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-md bg-card border-border" hideCloseButton>
+      <DialogContent className="sm:max-w-md bg-card border-border max-h-[90vh] overflow-y-auto" hideCloseButton>
         <DialogHeader className="text-center">
           <div className="flex justify-center mb-4">
             <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-primary/10 border border-primary/20">
@@ -188,13 +222,98 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
                 <SelectValue placeholder="Select your intent" />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                <SelectItem value="learning">Learning — just exploring</SelectItem>
-                <SelectItem value="active">Active project — need specific help</SelectItem>
+                <SelectItem value="learning">Learning — just exploring the sign industry</SelectItem>
+                <SelectItem value="active">Active project — I'm a sign professional needing help</SelectItem>
                 <SelectItem value="training">Training — teaching myself or my team</SelectItem>
+                <SelectItem value="shopping">Shopping — I need a sign made</SelectItem>
               </SelectContent>
             </Select>
             {errors.intent && <p className="text-xs text-destructive">{errors.intent}</p>}
           </div>
+
+          {/* Conditional fields for shoppers */}
+          {isShopper && (
+            <div className="space-y-4 pt-2 border-t border-border">
+              <p className="text-sm text-muted-foreground">Tell us about your project (optional)</p>
+              
+              <div className="space-y-2">
+                <Label htmlFor="businessName" className="text-foreground">Business Name</Label>
+                <Input
+                  id="businessName"
+                  placeholder="Your business name"
+                  value={formData.businessName}
+                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  className="bg-muted border-border focus:border-primary"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-foreground">Project Type</Label>
+                <Select
+                  value={formData.projectType}
+                  onValueChange={(value) => setFormData({ ...formData, projectType: value })}
+                >
+                  <SelectTrigger className="bg-muted border-border focus:border-primary">
+                    <SelectValue placeholder="What type of sign?" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="channel-letters">Channel letters / Building sign</SelectItem>
+                    <SelectItem value="monument">Monument sign</SelectItem>
+                    <SelectItem value="dimensional">Dimensional letters (non-lit)</SelectItem>
+                    <SelectItem value="led-neon">LED / Neon sign</SelectItem>
+                    <SelectItem value="other">Other / Not sure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-foreground">Timeline</Label>
+                <Select
+                  value={formData.timeline}
+                  onValueChange={(value) => setFormData({ ...formData, timeline: value })}
+                >
+                  <SelectTrigger className="bg-muted border-border focus:border-primary">
+                    <SelectValue placeholder="When do you need it?" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="asap">ASAP / Rush</SelectItem>
+                    <SelectItem value="2-4-weeks">2-4 weeks</SelectItem>
+                    <SelectItem value="1-2-months">1-2 months</SelectItem>
+                    <SelectItem value="researching">Just researching</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-foreground">Location</Label>
+                <Select
+                  value={formData.location}
+                  onValueChange={(value) => setFormData({ ...formData, location: value })}
+                >
+                  <SelectTrigger className="bg-muted border-border focus:border-primary">
+                    <SelectValue placeholder="Select your state" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border max-h-60">
+                    {US_STATES.map((state) => (
+                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-foreground">Phone (for quote follow-up)</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="bg-muted border-border focus:border-primary"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex items-start space-x-2 pt-2">
             <Checkbox

@@ -35,12 +35,26 @@ serve(async (req) => {
 
     const systemPrompt = settings?.setting_value || 'You are SignMaker.ai, a helpful assistant for the sign industry. You help with signage and fabrication questions including channel letters, monument signs, materials, LED lighting, pricing, and installation.'
 
+    // Special handling for shoppers (sign buyers)
+    const isShopperIntent = user_context?.intent === 'shopping';
+    const shopperGuidance = isShopperIntent ? `
+
+SPECIAL GUIDANCE FOR SIGN BUYERS:
+This user is looking to purchase a sign, not a sign industry professional. Adapt your responses:
+- Be helpful but guide toward getting a quote from a professional sign company
+- Explain options in buyer-friendly terms, avoid fabricator jargon
+- After answering technical questions, consider offering: "Would you like help understanding what to ask sign companies for this project?"
+- Don't overwhelm with technical manufacturing details unless they specifically ask
+- Focus on: what they'll get, realistic timeline expectations, and questions to ask vendors
+- If discussing materials or options, explain the benefits from an end-user perspective` : '';
+
     const contextualPrompt = `${systemPrompt}
 
 USER CONTEXT:
 Name: ${user_context?.name || 'Unknown'}
 Experience Level: ${user_context?.experience_level || 'Unknown'}
 Intent: ${user_context?.intent || 'Unknown'}
+${shopperGuidance}
 
 Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.`
 
