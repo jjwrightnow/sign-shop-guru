@@ -1,9 +1,112 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { Resend } from "https://esm.sh/resend@2.0.0"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// B2B inquiry trigger keywords
+const B2B_TRIGGERS = [
+  'training tool', 'train my team', 'train staff', 'customer-facing', 'sales tool',
+  'embed', 'white-label', 'white label', 'api access', 'integrate', 'integration',
+  'for my business', 'for our company', 'for my shop', 'business inquiry',
+  'licensing', 'enterprise', 'bulk', 'franchise'
+];
+
+// Referral trigger keywords
+const REFERRAL_TRIGGERS = [
+  'find a sign company', 'find a sign shop', 'recommend a sign', 'connect me with',
+  'sign professional', 'sign maker near', 'who can make', 'get a quote',
+  'need someone to', 'hire someone', 'looking for someone'
+];
+
+// Email notification helper
+async function sendNotificationEmail(
+  to: string,
+  subject: string,
+  html: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendApiKey) {
+      console.error("RESEND_API_KEY not configured");
+      return { success: false, error: "Email not configured" };
+    }
+    
+    const resend = new Resend(resendApiKey);
+    const result = await resend.emails.send({
+      from: "SignMaker.ai <onboarding@resend.dev>",
+      to: [to],
+      subject,
+      html,
+    });
+    
+    console.log("Email sent successfully:", result);
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error sending email:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Parse B2B inquiry data from AI response
+function parseB2BData(response: string): { company_name?: string; role?: string; contact_info?: string; interest_type?: string; goals?: string } | null {
+  const b2bMarker = response.match(/\[B2B_DATA_COLLECTED\]([\s\S]*?)\[\/B2B_DATA_COLLECTED\]/);
+  if (!b2bMarker) return null;
+  
+  const dataBlock = b2bMarker[1];
+  const data: any = {};
+  
+  const companyMatch = dataBlock.match(/company_name:\s*(.+)/i);
+  const roleMatch = dataBlock.match(/role:\s*(.+)/i);
+  const contactMatch = dataBlock.match(/contact_info:\s*(.+)/i);
+  const interestMatch = dataBlock.match(/interest_type:\s*(.+)/i);
+  const goalsMatch = dataBlock.match(/goals:\s*(.+)/i);
+  
+  if (companyMatch) data.company_name = companyMatch[1].trim();
+  if (roleMatch) data.role = roleMatch[1].trim();
+  if (contactMatch) data.contact_info = contactMatch[1].trim();
+  if (interestMatch) data.interest_type = interestMatch[1].trim();
+  if (goalsMatch) data.goals = goalsMatch[1].trim();
+  
+  return Object.keys(data).length > 0 ? data : null;
+}
+
+// Parse referral data from AI response
+function parseReferralData(response: string): { location_city?: string; location_state?: string; project_type?: string; timeline?: string; phone?: string; best_time_to_call?: string; notes?: string } | null {
+  const referralMarker = response.match(/\[REFERRAL_DATA_COLLECTED\]([\s\S]*?)\[\/REFERRAL_DATA_COLLECTED\]/);
+  if (!referralMarker) return null;
+  
+  const dataBlock = referralMarker[1];
+  const data: any = {};
+  
+  const cityMatch = dataBlock.match(/location_city:\s*(.+)/i);
+  const stateMatch = dataBlock.match(/location_state:\s*(.+)/i);
+  const projectMatch = dataBlock.match(/project_type:\s*(.+)/i);
+  const timelineMatch = dataBlock.match(/timeline:\s*(.+)/i);
+  const phoneMatch = dataBlock.match(/phone:\s*(.+)/i);
+  const timeMatch = dataBlock.match(/best_time_to_call:\s*(.+)/i);
+  const notesMatch = dataBlock.match(/notes:\s*(.+)/i);
+  
+  if (cityMatch) data.location_city = cityMatch[1].trim();
+  if (stateMatch) data.location_state = stateMatch[1].trim();
+  if (projectMatch) data.project_type = projectMatch[1].trim();
+  if (timelineMatch) data.timeline = timelineMatch[1].trim();
+  if (phoneMatch) data.phone = phoneMatch[1].trim();
+  if (timeMatch) data.best_time_to_call = timeMatch[1].trim();
+  if (notesMatch) data.notes = notesMatch[1].trim();
+  
+  return Object.keys(data).length > 0 ? data : null;
+}
+
+// Clean data markers from response before showing to user
+function cleanDataMarkers(response: string): string {
+  return response
+    .replace(/\[B2B_DATA_COLLECTED\][\s\S]*?\[\/B2B_DATA_COLLECTED\]/g, '')
+    .replace(/\[REFERRAL_DATA_COLLECTED\][\s\S]*?\[\/REFERRAL_DATA_COLLECTED\]/g, '')
+    .trim();
 }
 
 // Rate limiting configuration
@@ -455,14 +558,61 @@ CONVERSATION APPROACH:
 - Help them understand what questions to ask sign companies
 
 PROACTIVE REFERRAL (IMPORTANT):
-- After 2-3 helpful exchanges (${messageCount >= 3 ? 'NOW is a good time' : 'wait for more exchanges'}), offer to connect them with SignExperts.ai
-- Say something like: "Based on what you're looking for, I can help connect you with vetted sign professionals in your area through SignExperts.ai. Would that be helpful?"
+- After 2-3 helpful exchanges (${messageCount >= 3 ? 'NOW is a good time' : 'wait for more exchanges'}), offer to connect them with a sign professional
+- Say something like: "Based on what you're looking for, I can help connect you with a sign professional in your area. Would that be helpful?"
 - Don't push too hard, but make it a natural suggestion after you've been helpful
+
+REFERRAL DATA COLLECTION:
+When a shopper says YES to being connected with a sign professional, or asks "how do I find a sign company", "can you recommend someone", etc., collect their information conversationally:
+
+Ask: "I'd be happy to connect you with a sign pro! Quick questions:
+- What city and state are you in?
+- What type of sign are you looking for?
+- What's your timeline?
+- Best phone number to reach you?
+- Preferred time to be contacted?"
+
+After they provide the info, include this hidden data block at the END of your response (the user won't see it):
+[REFERRAL_DATA_COLLECTED]
+location_city: [their city]
+location_state: [their state]
+project_type: [sign type]
+timeline: [their timeline]
+phone: [their phone]
+best_time_to_call: [preferred time]
+notes: [any additional project details]
+[/REFERRAL_DATA_COLLECTED]
+
+Then confirm: "Perfect! A sign professional in your area will reach out within 1 business day. Anything else I can help with?"
 
 AVOID:
 - Technical manufacturing jargon (channel letters, raceway, routed faces, etc.) unless they ask
 - Overwhelming details about materials and processes
 - Assuming they know industry terminology` : '';
+
+    // B2B/Business inquiry guidance
+    const b2bGuidance = `
+
+B2B INQUIRY COLLECTION:
+When a user shows interest in SignMaker.ai for their business (mentions training tool, white-label, API, embedding, enterprise use, or says "yes" to a B2B offer), collect their business information conversationally:
+
+Ask: "Great! Tell me a bit about your company:
+- Company name?
+- Your role?
+- Best email or phone to reach you?
+- What are you hoping to achieve — team training, customer-facing tool, or both?"
+
+After they provide the info, include this hidden data block at the END of your response (the user won't see it):
+[B2B_DATA_COLLECTED]
+company_name: [their company]
+role: [their role]
+contact_info: [email or phone]
+interest_type: [training/customer-facing/both/other]
+goals: [what they want to achieve]
+[/B2B_DATA_COLLECTED]
+
+Then confirm: "Thanks! Someone from our team will reach out within 1 business day. Feel free to keep asking questions in the meantime."
+`;
 
     // Build custom context section for trained users
     const customContextSection = userTrainingContext ? `
@@ -488,10 +638,17 @@ Intent: ${user_context?.intent || 'Unknown'}
 Message Count in Conversation: ${messageCount}
 ${customContextSection}
 ${shopperGuidance}
+${b2bGuidance}
 
 ${isShopperUser ? '' : 'Adapt your response based on their experience level and intent. For beginners, explain concepts more thoroughly. For veterans, be more technical and concise.'}
 
-IMPORTANT: If the user asks about topics completely unrelated to signs, signage, or the sign industry, politely redirect them. You can say something like "I focus on signage and the sign industry. Is there something sign-related I can help you with?"`
+IMPORTANT: If the user asks about topics completely unrelated to signs, signage, or the sign industry, politely redirect them. You can say something like "I focus on signage and the sign industry. Is there something sign-related I can help you with?"
+
+CRITICAL DATA COLLECTION RULES:
+- The [B2B_DATA_COLLECTED] and [REFERRAL_DATA_COLLECTED] blocks are HIDDEN from users - they are for system processing only
+- Only include these blocks AFTER the user has provided the requested information
+- Keep collecting information conversationally until you have enough to fill the data block
+- Always confirm submission after collecting data`
 
     console.log('Calling Claude API...')
 
@@ -523,6 +680,183 @@ IMPORTANT: If the user asks about topics completely unrelated to signs, signage,
 
     // Update usage stats for successful API call
     await updateUsageStats(supabase, 'total_api_calls', ESTIMATED_COST_PER_MESSAGE_CENTS);
+
+    // ========== B2B DATA COLLECTION ==========
+    const b2bData = parseB2BData(assistantResponse);
+    if (b2bData && conversation?.user_id) {
+      console.log('B2B data collected:', b2bData);
+      
+      // Get user info
+      const { data: userInfo } = await supabase
+        .from('users')
+        .select('name, email')
+        .eq('id', conversation.user_id)
+        .single();
+      
+      // Save to b2b_inquiries table
+      const b2bRecord = {
+        company_name: b2bData.company_name || null,
+        contact_info: b2bData.contact_info || userInfo?.email || null,
+        role: b2bData.role || null,
+        interest_type: b2bData.interest_type || null,
+        goals: b2bData.goals || null,
+        user_id: conversation.user_id,
+        conversation_id: conversation_id,
+        status: 'new'
+      };
+      
+      const { data: insertedB2B, error: b2bError } = await supabase
+        .from('b2b_inquiries')
+        .insert(b2bRecord)
+        .select()
+        .single();
+      
+      if (b2bError) {
+        console.error('Error saving B2B inquiry:', b2bError);
+      } else {
+        console.log('B2B inquiry saved:', insertedB2B);
+        
+        // Send email notification to partners@signmaker.ai
+        const timestamp = new Date().toISOString();
+        const adminLink = 'https://signmaker.ai/admin';
+        
+        await sendNotificationEmail(
+          'partners@signmaker.ai',
+          `New B2B Inquiry: ${b2bData.company_name || 'Unknown Company'}`,
+          `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">NEW B2B INQUIRY</h2>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Company:</td>
+                <td style="padding: 8px 0;">${b2bData.company_name || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
+                <td style="padding: 8px 0;">${userInfo?.name || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
+                <td style="padding: 8px 0;">${b2bData.contact_info || userInfo?.email || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Role:</td>
+                <td style="padding: 8px 0;">${b2bData.role || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Interest:</td>
+                <td style="padding: 8px 0;">${b2bData.interest_type || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Goals:</td>
+                <td style="padding: 8px 0;">${b2bData.goals || 'Not provided'}</td>
+              </tr>
+            </table>
+            
+            <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
+            
+            <a href="${adminLink}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
+          </div>
+          `
+        );
+      }
+    }
+
+    // ========== REFERRAL DATA COLLECTION ==========
+    const referralData = parseReferralData(assistantResponse);
+    if (referralData && conversation?.user_id) {
+      console.log('Referral data collected:', referralData);
+      
+      // Get user info
+      const { data: userInfo } = await supabase
+        .from('users')
+        .select('name, email, phone')
+        .eq('id', conversation.user_id)
+        .single();
+      
+      // Save to referrals table
+      const referralRecord = {
+        user_id: conversation.user_id,
+        conversation_id: conversation_id,
+        location_city: referralData.location_city || null,
+        location_state: referralData.location_state || null,
+        project_type: referralData.project_type || null,
+        timeline: referralData.timeline || null,
+        phone: referralData.phone || userInfo?.phone || null,
+        best_time_to_call: referralData.best_time_to_call || null,
+        notes: referralData.notes || null,
+        status: 'new'
+      };
+      
+      const { data: insertedReferral, error: referralError } = await supabase
+        .from('referrals')
+        .insert(referralRecord)
+        .select()
+        .single();
+      
+      if (referralError) {
+        console.error('Error saving referral:', referralError);
+      } else {
+        console.log('Referral saved:', insertedReferral);
+        
+        // Send email notification to ask@signmaker.ai
+        const timestamp = new Date().toISOString();
+        const adminLink = 'https://signmaker.ai/admin';
+        
+        await sendNotificationEmail(
+          'ask@signmaker.ai',
+          `New Referral: ${referralData.project_type || 'Sign Project'}`,
+          `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px;">NEW REFERRAL</h2>
+            
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Contact:</td>
+                <td style="padding: 8px 0;">${userInfo?.name || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
+                <td style="padding: 8px 0;">${userInfo?.email || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
+                <td style="padding: 8px 0;">${referralData.phone || userInfo?.phone || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Location:</td>
+                <td style="padding: 8px 0;">${referralData.location_city || ''} ${referralData.location_state || ''}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Project Type:</td>
+                <td style="padding: 8px 0;">${referralData.project_type || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Timeline:</td>
+                <td style="padding: 8px 0;">${referralData.timeline || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
+                <td style="padding: 8px 0;">${referralData.best_time_to_call || 'Not provided'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; color: #666;">Notes:</td>
+                <td style="padding: 8px 0;">${referralData.notes || 'None'}</td>
+              </tr>
+            </table>
+            
+            <p style="color: #888; font-size: 12px;">Submitted: ${timestamp}</p>
+            
+            <a href="${adminLink}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #00d4ff; color: #000; text-decoration: none; border-radius: 6px; font-weight: bold;">View in Admin</a>
+          </div>
+          `
+        );
+      }
+    }
+
+    // Clean data markers from response before showing to user
+    assistantResponse = cleanDataMarkers(assistantResponse);
 
     // OFF-TOPIC DETECTION
     let newOffTopicCount = userData?.off_topic_count || 0;
