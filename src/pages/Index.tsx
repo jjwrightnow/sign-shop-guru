@@ -9,6 +9,8 @@ import OptInPrompt from "@/components/OptInPrompt";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
+import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
+import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -35,7 +37,7 @@ interface ConversationData {
   message_count?: number;
 }
 
-const Index = () => {
+const IndexContent = () => {
   const { toast } = useToast();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,6 +54,9 @@ const Index = () => {
   const [shortcutsSkipped, setShortcutsSkipped] = useState(false);
   const [selectedShortcut, setSelectedShortcut] = useState<string | null>(null);
   const [followUpSkipped, setFollowUpSkipped] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
+  const [showFullGlossary, setShowFullGlossary] = useState(false);
+  const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -558,6 +563,28 @@ const Index = () => {
     !isTyping && 
     !followUpSkipped;
 
+  // Handle opening glossary panel
+  const handleGlossaryClick = () => {
+    setShowFullGlossary(true);
+    setShowGlossary(true);
+    setSelectedTerm(null);
+  };
+
+  // Close glossary panel
+  const handleGlossaryClose = () => {
+    setShowGlossary(false);
+    setShowFullGlossary(false);
+    setSelectedTerm(null);
+  };
+
+  // Open panel when term is selected from chat
+  useEffect(() => {
+    if (selectedTerm) {
+      setShowGlossary(true);
+      setShowFullGlossary(false);
+    }
+  }, [selectedTerm]);
+
   return (
     <div className="flex min-h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
@@ -593,6 +620,7 @@ const Index = () => {
           transcriptSending={transcriptSending}
           transcriptAlreadySent={transcriptAlreadySent}
           userEmail={userData?.email}
+          onGlossaryClick={userData ? handleGlossaryClick : undefined}
         />
         
         <main className="flex-1 overflow-y-auto">
@@ -605,6 +633,8 @@ const Index = () => {
                   isUser={message.isUser}
                   showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
                   messageId={message.dbId}
+                  userId={userData?.userId}
+                  conversationId={userData?.conversationId}
                 />
               ))}
               
@@ -646,7 +676,24 @@ const Index = () => {
         
         <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
       </div>
+
+      {/* Glossary Panel */}
+      {showGlossary && (
+        <GlossaryPanel 
+          onClose={handleGlossaryClose}
+          showFullGlossary={showFullGlossary}
+        />
+      )}
     </div>
+  );
+};
+
+// Wrapper component with GlossaryProvider
+const Index = () => {
+  return (
+    <GlossaryProvider>
+      <IndexContent />
+    </GlossaryProvider>
   );
 };
 
