@@ -199,8 +199,11 @@ const Index = () => {
         setMessages(loadedMessages);
         setMessageCount(dbMessages.filter((m: any) => m.role === "user").length);
       } else {
-        // No messages, show welcome
-        const welcomeMessage = `Hey ${userName} — I help with signage and fabrication questions. What would you like to know?`;
+        // No messages, show welcome - tailored for shoppers
+        const isShopper = userData?.experienceLevel === 'shopper' || userData?.intent === 'shopping';
+        const welcomeMessage = isShopper
+          ? `Hey ${userName} — I'll help you understand your sign options. What kind of sign are you thinking about?`
+          : `Hey ${userName} — I help with signage and fabrication questions. What would you like to know?`;
         setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
         setMessageCount(0);
       }
@@ -218,8 +221,11 @@ const Index = () => {
 
     setUserData(data);
     
-    // Set personalized welcome message
-    const welcomeMessage = `Hey ${data.name} — I help with signage and fabrication questions. What would you like to know?`;
+    // Set personalized welcome message - tailored for shoppers
+    const isShopper = data.experienceLevel === 'shopper' || data.intent === 'shopping';
+    const welcomeMessage = isShopper
+      ? `Hey ${data.name} — I'll help you understand your sign options. What kind of sign are you thinking about?`
+      : `Hey ${data.name} — I help with signage and fabrication questions. What would you like to know?`;
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
     setMessageCount(0);
 
@@ -250,7 +256,11 @@ const Index = () => {
 
       setUserData({ ...userData, conversationId: newConvo.id });
       
-      const welcomeMessage = `Hey ${userData.name} — I help with signage and fabrication questions. What would you like to know?`;
+      // Set personalized welcome message - tailored for shoppers
+      const isShopper = userData.experienceLevel === 'shopper' || userData.intent === 'shopping';
+      const welcomeMessage = isShopper
+        ? `Hey ${userData.name} — I'll help you understand your sign options. What kind of sign are you thinking about?`
+        : `Hey ${userData.name} — I help with signage and fabrication questions. What would you like to know?`;
       setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
       setMessageCount(0);
       setShowOptIn(false);
