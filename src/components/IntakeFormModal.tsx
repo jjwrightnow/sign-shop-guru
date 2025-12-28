@@ -33,11 +33,15 @@ const US_STATES = [
   "Wisconsin", "Wyoming"
 ];
 
-const formSchema = z.object({
+// Dynamic schema - intent is optional when experience level is "shopper"
+const createFormSchema = (experienceLevel: string) => z.object({
   name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
   email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
   experienceLevel: z.string().min(1, "Please select your experience level"),
-  intent: z.string().min(1, "Please select what brings you here"),
+  // Intent is required only for non-shoppers
+  intent: experienceLevel === "shopper" 
+    ? z.string().optional() 
+    : z.string().min(1, "Please select what brings you here"),
   tosAccepted: z.literal(true, { errorMap: () => ({ message: "You must accept the Terms of Service" }) }),
   // Optional fields for shoppers
   businessName: z.string().max(200).optional(),
@@ -205,6 +209,8 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
     e.preventDefault();
     setErrors({});
 
+    // Use dynamic schema based on experience level
+    const formSchema = createFormSchema(formData.experienceLevel);
     const result = formSchema.safeParse(formData);
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -399,7 +405,19 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
             <Label className="text-foreground">Experience Level</Label>
             <Select
               value={formData.experienceLevel}
-              onValueChange={(value) => setFormData({ ...formData, experienceLevel: value })}
+              onValueChange={(value) => {
+                // Auto-set intent for shoppers
+                if (value === "shopper") {
+                  setFormData({ ...formData, experienceLevel: value, intent: "shopping" });
+                } else {
+                  // Clear auto-set intent if switching away from shopper
+                  setFormData({ 
+                    ...formData, 
+                    experienceLevel: value, 
+                    intent: formData.intent === "shopping" && formData.experienceLevel === "shopper" ? "" : formData.intent 
+                  });
+                }
+              }}
             >
               <SelectTrigger className="bg-muted border-border focus:border-primary">
                 <SelectValue placeholder="Select your experience" />
@@ -414,24 +432,27 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
             {errors.experienceLevel && <p className="text-xs text-destructive">{errors.experienceLevel}</p>}
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-foreground">What brings you here?</Label>
-            <Select
-              value={formData.intent}
-              onValueChange={(value) => setFormData({ ...formData, intent: value })}
-            >
-              <SelectTrigger className="bg-muted border-border focus:border-primary">
-                <SelectValue placeholder="Select your intent" />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-border">
-                <SelectItem value="learning">Learning — just exploring the sign industry</SelectItem>
-                <SelectItem value="active">Active project — I'm a sign professional needing help</SelectItem>
-                <SelectItem value="training">Training — teaching myself or my team</SelectItem>
-                <SelectItem value="shopping">Shopping — I need a sign made</SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.intent && <p className="text-xs text-destructive">{errors.intent}</p>}
-          </div>
+          {/* Only show intent dropdown for non-shoppers */}
+          {formData.experienceLevel !== "shopper" && (
+            <div className="space-y-2">
+              <Label className="text-foreground">What brings you here?</Label>
+              <Select
+                value={formData.intent}
+                onValueChange={(value) => setFormData({ ...formData, intent: value })}
+              >
+                <SelectTrigger className="bg-muted border-border focus:border-primary">
+                  <SelectValue placeholder="Select your intent" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="learning">Learning — just exploring the sign industry</SelectItem>
+                  <SelectItem value="active">Active project — I'm a sign professional needing help</SelectItem>
+                  <SelectItem value="training">Training — teaching myself or my team</SelectItem>
+                  <SelectItem value="shopping">Shopping — I need a sign made</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.intent && <p className="text-xs text-destructive">{errors.intent}</p>}
+            </div>
+          )}
 
           {/* Conditional fields for shoppers */}
           {isShopper && (
