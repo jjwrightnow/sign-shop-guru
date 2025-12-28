@@ -183,6 +183,7 @@ export type Database = {
           offers_shown: string[] | null
           referral_completed: boolean | null
           referral_pending: boolean | null
+          shortcut_selected: string | null
           transcript_emailed: boolean | null
           transcript_emailed_at: string | null
           transcript_offered: boolean | null
@@ -197,6 +198,7 @@ export type Database = {
           offers_shown?: string[] | null
           referral_completed?: boolean | null
           referral_pending?: boolean | null
+          shortcut_selected?: string | null
           transcript_emailed?: boolean | null
           transcript_emailed_at?: string | null
           transcript_offered?: boolean | null
@@ -211,6 +213,7 @@ export type Database = {
           offers_shown?: string[] | null
           referral_completed?: boolean | null
           referral_pending?: boolean | null
+          shortcut_selected?: string | null
           transcript_emailed?: boolean | null
           transcript_emailed_at?: string | null
           transcript_offered?: boolean | null
@@ -735,9 +738,11 @@ export type Database = {
           off_topic_count: number | null
           phone: string | null
           project_type: string | null
+          services: string[] | null
           spam_flags: number | null
           tier: string | null
           timeline: string | null
+          topic_focus: string | null
           tos_accepted: boolean | null
         }
         Insert: {
@@ -756,9 +761,11 @@ export type Database = {
           off_topic_count?: number | null
           phone?: string | null
           project_type?: string | null
+          services?: string[] | null
           spam_flags?: number | null
           tier?: string | null
           timeline?: string | null
+          topic_focus?: string | null
           tos_accepted?: boolean | null
         }
         Update: {
@@ -777,9 +784,11 @@ export type Database = {
           off_topic_count?: number | null
           phone?: string | null
           project_type?: string | null
+          services?: string[] | null
           spam_flags?: number | null
           tier?: string | null
           timeline?: string | null
+          topic_focus?: string | null
           tos_accepted?: boolean | null
         }
         Relationships: []

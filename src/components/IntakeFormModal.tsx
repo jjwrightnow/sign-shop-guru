@@ -33,13 +33,13 @@ const US_STATES = [
   "Wisconsin", "Wyoming"
 ];
 
-// Dynamic schema - intent is optional when experience level is "shopper"
+// Dynamic schema - intent is optional when experience level is "shopper" or "freelancer"
 const createFormSchema = (experienceLevel: string) => z.object({
   name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
   email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
   experienceLevel: z.string().min(1, "Please select your experience level"),
-  // Intent is required only for non-shoppers
-  intent: experienceLevel === "shopper" 
+  // Intent is required only for non-shoppers and non-freelancers
+  intent: (experienceLevel === "shopper" || experienceLevel === "freelancer")
     ? z.string().optional() 
     : z.string().min(1, "Please select what brings you here"),
   tosAccepted: z.literal(true, { errorMap: () => ({ message: "You must accept the Terms of Service" }) }),
@@ -406,15 +406,20 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
             <Select
               value={formData.experienceLevel}
               onValueChange={(value) => {
-                // Auto-set intent for shoppers
+                // Auto-set intent for shoppers and freelancers
                 if (value === "shopper") {
                   setFormData({ ...formData, experienceLevel: value, intent: "shopping" });
+                } else if (value === "freelancer") {
+                  setFormData({ ...formData, experienceLevel: value, intent: "leads" });
                 } else {
-                  // Clear auto-set intent if switching away from shopper
+                  // Clear auto-set intent if switching away from shopper/freelancer
+                  const shouldClearIntent = 
+                    (formData.intent === "shopping" && formData.experienceLevel === "shopper") ||
+                    (formData.intent === "leads" && formData.experienceLevel === "freelancer");
                   setFormData({ 
                     ...formData, 
                     experienceLevel: value, 
-                    intent: formData.intent === "shopping" && formData.experienceLevel === "shopper" ? "" : formData.intent 
+                    intent: shouldClearIntent ? "" : formData.intent 
                   });
                 }
               }}
@@ -426,14 +431,15 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
                 <SelectItem value="new">New to the industry</SelectItem>
                 <SelectItem value="1-3">1-3 years experience</SelectItem>
                 <SelectItem value="veteran">3+ years / Veteran</SelectItem>
+                <SelectItem value="freelancer">Freelancer / Contractor</SelectItem>
                 <SelectItem value="shopper">I'm not in the sign industry — just need a sign</SelectItem>
               </SelectContent>
             </Select>
             {errors.experienceLevel && <p className="text-xs text-destructive">{errors.experienceLevel}</p>}
           </div>
 
-          {/* Only show intent dropdown for non-shoppers */}
-          {formData.experienceLevel !== "shopper" && (
+          {/* Only show intent dropdown for non-shoppers and non-freelancers */}
+          {formData.experienceLevel !== "shopper" && formData.experienceLevel !== "freelancer" && (
             <div className="space-y-2">
               <Label className="text-foreground">What brings you here?</Label>
               <Select
