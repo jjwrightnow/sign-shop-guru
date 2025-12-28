@@ -7,7 +7,7 @@ import IntakeFormModal from "@/components/IntakeFormModal";
 import ConversationSidebar from "@/components/ConversationSidebar";
 import OptInPrompt from "@/components/OptInPrompt";
 import TrainMePanel from "@/components/TrainMePanel";
-import QuickStartPrompts from "@/components/QuickStartPrompts";
+import SmartShortcuts from "@/components/SmartShortcuts";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -48,6 +48,7 @@ const Index = () => {
   const [isTrained, setIsTrained] = useState(false);
   const [transcriptSending, setTranscriptSending] = useState(false);
   const [transcriptAlreadySent, setTranscriptAlreadySent] = useState(false);
+  const [shortcutsSkipped, setShortcutsSkipped] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -181,6 +182,23 @@ const Index = () => {
     }
   };
 
+  // Generate tailored welcome message based on user type
+  const getWelcomeMessage = (name: string, experienceLevel: string, intent: string): string => {
+    if (experienceLevel === 'shopper' || intent === 'shopping') {
+      return `Hey ${name} — I'll help you understand your sign options. What kind of sign are you thinking about?`;
+    }
+    if (experienceLevel === 'freelancer' || intent === 'leads') {
+      return `Hey ${name} — I can help you find leads and connect with sign shops. What services do you offer?`;
+    }
+    if (intent === 'active') {
+      return `Hey ${name} — I'm here to help with your project. What are you working on?`;
+    }
+    if (intent === 'training') {
+      return `Hey ${name} — Ready to learn! What topic would you like to dive into?`;
+    }
+    return `Hey ${name} — I help with signage and fabrication questions. What would you like to know?`;
+  };
+
   const loadConversationMessages = async (conversationId: string, userName: string) => {
     try {
       const { data, error } = await supabase.functions.invoke("get-messages", {
@@ -199,14 +217,19 @@ const Index = () => {
         }));
         setMessages(loadedMessages);
         setMessageCount(dbMessages.filter((m: any) => m.role === "user").length);
+        // Don't show shortcuts if conversation has messages
+        setShortcutsSkipped(true);
       } else {
-        // No messages, show welcome - tailored for shoppers
-        const isShopper = userData?.experienceLevel === 'shopper' || userData?.intent === 'shopping';
-        const welcomeMessage = isShopper
-          ? `Hey ${userName} — I'll help you understand your sign options. What kind of sign are you thinking about?`
-          : `Hey ${userName} — I help with signage and fabrication questions. What would you like to know?`;
+        // No messages, show welcome
+        const welcomeMessage = getWelcomeMessage(
+          userName, 
+          userData?.experienceLevel || '', 
+          userData?.intent || ''
+        );
         setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
         setMessageCount(0);
+        // Reset shortcuts for fresh conversation
+        setShortcutsSkipped(false);
       }
     } catch (error) {
       console.error("Error loading messages:", error);
@@ -222,11 +245,11 @@ const Index = () => {
 
     setUserData(data);
     
-    // Set personalized welcome message - tailored for shoppers
-    const isShopper = data.experienceLevel === 'shopper' || data.intent === 'shopping';
-    const welcomeMessage = isShopper
-      ? `Hey ${data.name} — I'll help you understand your sign options. What kind of sign are you thinking about?`
-      : `Hey ${data.name} — I help with signage and fabrication questions. What would you like to know?`;
+    // Set personalized welcome message
+    const welcomeMessage = getWelcomeMessage(data.name, data.experienceLevel, data.intent);
+    setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+    setMessageCount(0);
+    setShortcutsSkipped(false);
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
     setMessageCount(0);
 
@@ -257,15 +280,13 @@ const Index = () => {
 
       setUserData({ ...userData, conversationId: newConvo.id });
       
-      // Set personalized welcome message - tailored for shoppers
-      const isShopper = userData.experienceLevel === 'shopper' || userData.intent === 'shopping';
-      const welcomeMessage = isShopper
-        ? `Hey ${userData.name} — I'll help you understand your sign options. What kind of sign are you thinking about?`
-        : `Hey ${userData.name} — I help with signage and fabrication questions. What would you like to know?`;
+      // Set personalized welcome message
+      const welcomeMessage = getWelcomeMessage(userData.name, userData.experienceLevel, userData.intent);
       setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
       setMessageCount(0);
       setShowOptIn(false);
       setTranscriptAlreadySent(false);
+      setShortcutsSkipped(false);
 
       // Refresh conversations list
       await loadUserConversations(userData.userId);
@@ -446,15 +467,65 @@ const Index = () => {
     }
   };
 
-  // Check if user is a sign professional (not a shopper)
+  // Check if user is a sign professional (not a shopper or freelancer)
   const isSignProfessional = userData && 
     userData.experienceLevel !== 'shopper' && 
-    userData.intent !== 'shopping';
+    userData.experienceLevel !== 'freelancer' &&
+    userData.intent !== 'shopping' &&
+    userData.intent !== 'leads';
 
-  // Check if user is a shopper and this is a fresh conversation (only welcome message)
-  const isShopper = userData && 
-    (userData.experienceLevel === 'shopper' || userData.intent === 'shopping');
-  const showQuickStart = isShopper && messages.length === 1 && !messages[0]?.isUser && !isTyping;
+  // Determine smart shortcut type based on user profile
+  const getSmartShortcutType = (): "shopper" | "professional-active" | "professional-training" | "freelancer" | null => {
+    if (!userData) return null;
+    
+    // Shopper
+    if (userData.experienceLevel === 'shopper' || userData.intent === 'shopping') {
+      return "shopper";
+    }
+    
+    // Freelancer
+    if (userData.experienceLevel === 'freelancer' || userData.intent === 'leads') {
+      return "freelancer";
+    }
+    
+    // Professional - Active project
+    if (userData.intent === 'active') {
+      return "professional-active";
+    }
+    
+    // Professional - Training
+    if (userData.intent === 'training') {
+      return "professional-training";
+    }
+    
+    // Learning or other - no shortcuts, go straight to chat
+    return null;
+  };
+
+  const smartShortcutType = getSmartShortcutType();
+  const isFreshConversation = messages.length === 1 && !messages[0]?.isUser;
+  const showSmartShortcuts = smartShortcutType && isFreshConversation && !isTyping && !shortcutsSkipped;
+
+  const handleShortcutSelect = async (shortcut: { value: string; prompt: string }) => {
+    if (!userData) return;
+    
+    // Track the shortcut selection
+    try {
+      await supabase
+        .from("conversations")
+        .update({ shortcut_selected: shortcut.value })
+        .eq("id", userData.conversationId);
+    } catch (error) {
+      console.error("Error tracking shortcut:", error);
+    }
+    
+    // Send the prompt
+    handleSend(shortcut.prompt);
+  };
+
+  const handleShortcutsSkip = () => {
+    setShortcutsSkipped(true);
+  };
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -506,9 +577,13 @@ const Index = () => {
                 />
               ))}
               
-              {/* Quick-start prompts for shoppers on fresh conversation */}
-              {showQuickStart && (
-                <QuickStartPrompts onSelectPrompt={handleSend} />
+              {/* Smart shortcuts for all user types on fresh conversation */}
+              {showSmartShortcuts && smartShortcutType && (
+                <SmartShortcuts 
+                  userType={smartShortcutType}
+                  onSelectShortcut={handleShortcutSelect}
+                  onSkip={handleShortcutsSkip}
+                />
               )}
               
               {isTyping && <TypingIndicator />}
