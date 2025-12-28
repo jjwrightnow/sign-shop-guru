@@ -8,6 +8,7 @@ import ConversationSidebar from "@/components/ConversationSidebar";
 import OptInPrompt from "@/components/OptInPrompt";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
+import FollowUpShortcuts from "@/components/FollowUpShortcuts";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -49,6 +50,8 @@ const Index = () => {
   const [transcriptSending, setTranscriptSending] = useState(false);
   const [transcriptAlreadySent, setTranscriptAlreadySent] = useState(false);
   const [shortcutsSkipped, setShortcutsSkipped] = useState(false);
+  const [selectedShortcut, setSelectedShortcut] = useState<string | null>(null);
+  const [followUpSkipped, setFollowUpSkipped] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -219,6 +222,8 @@ const Index = () => {
         setMessageCount(dbMessages.filter((m: any) => m.role === "user").length);
         // Don't show shortcuts if conversation has messages
         setShortcutsSkipped(true);
+        setSelectedShortcut(null);
+        setFollowUpSkipped(true);
       } else {
         // No messages, show welcome
         const welcomeMessage = getWelcomeMessage(
@@ -230,6 +235,8 @@ const Index = () => {
         setMessageCount(0);
         // Reset shortcuts for fresh conversation
         setShortcutsSkipped(false);
+        setSelectedShortcut(null);
+        setFollowUpSkipped(false);
       }
     } catch (error) {
       console.error("Error loading messages:", error);
@@ -250,6 +257,8 @@ const Index = () => {
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
     setMessageCount(0);
     setShortcutsSkipped(false);
+    setSelectedShortcut(null);
+    setFollowUpSkipped(false);
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
     setMessageCount(0);
 
@@ -287,6 +296,8 @@ const Index = () => {
       setShowOptIn(false);
       setTranscriptAlreadySent(false);
       setShortcutsSkipped(false);
+      setSelectedShortcut(null);
+      setFollowUpSkipped(false);
 
       // Refresh conversations list
       await loadUserConversations(userData.userId);
@@ -509,6 +520,9 @@ const Index = () => {
   const handleShortcutSelect = async (shortcut: { value: string; prompt: string }) => {
     if (!userData) return;
     
+    // Store the selected shortcut for follow-up shortcuts
+    setSelectedShortcut(shortcut.value);
+    
     // Track the shortcut selection
     try {
       await supabase
@@ -526,6 +540,23 @@ const Index = () => {
   const handleShortcutsSkip = () => {
     setShortcutsSkipped(true);
   };
+
+  const handleFollowUpSelect = (prompt: string) => {
+    setFollowUpSkipped(true);
+    handleSend(prompt);
+  };
+
+  const handleFollowUpSkip = () => {
+    setFollowUpSkipped(true);
+  };
+
+  // Show follow-up shortcuts after first response (when we have 3 messages: welcome, user, assistant)
+  const showFollowUpShortcuts = selectedShortcut && 
+    smartShortcutType && 
+    messages.length === 3 && 
+    !messages[messages.length - 1]?.isUser && 
+    !isTyping && 
+    !followUpSkipped;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -583,6 +614,16 @@ const Index = () => {
                   userType={smartShortcutType}
                   onSelectShortcut={handleShortcutSelect}
                   onSkip={handleShortcutsSkip}
+                />
+              )}
+
+              {/* Follow-up shortcuts after first response */}
+              {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
+                <FollowUpShortcuts
+                  initialSelection={selectedShortcut}
+                  userType={smartShortcutType}
+                  onSelectShortcut={handleFollowUpSelect}
+                  onSkip={handleFollowUpSkip}
                 />
               )}
               

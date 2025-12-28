@@ -293,6 +293,10 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [selectedReport, setSelectedReport] = useState<InsightsReport | null>(null);
+  const [shortcutAnalytics, setShortcutAnalytics] = useState<{
+    total_this_week: number;
+    top_shortcuts: { shortcut: string; count: number }[];
+  }>({ total_this_week: 0, top_shortcuts: [] });
 
   useEffect(() => {
     fetchAllData();
@@ -441,6 +445,9 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
       }
       if (data.recent_alerts) {
         setRecentAlerts(data.recent_alerts);
+      }
+      if (data.shortcut_analytics) {
+        setShortcutAnalytics(data.shortcut_analytics);
       }
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -1229,7 +1236,7 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                 </div>
 
                 {/* Stats Row */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                   <div className="bg-card border border-border rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <MousePointerClick className="w-4 h-4 text-primary" />
@@ -1259,6 +1266,15 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                   </div>
                   <div className="bg-card border border-border rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
+                      <Zap className="w-4 h-4 text-cyan-500" />
+                      <span className="text-xs text-muted-foreground">Shortcuts This Week</span>
+                    </div>
+                    <span className="text-2xl font-bold text-foreground">
+                      {shortcutAnalytics.total_this_week}
+                    </span>
+                  </div>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
                       <HelpCircle className="w-4 h-4 text-yellow-500" />
                       <span className="text-xs text-muted-foreground">Unresolved Gaps</span>
                     </div>
@@ -1277,6 +1293,62 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                       ).length}
                     </span>
                   </div>
+                </div>
+
+                {/* Shortcut Analytics Section */}
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-cyan-500" />
+                    Most Selected Shortcuts This Week
+                  </h3>
+                  {shortcutAnalytics.top_shortcuts.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No shortcuts selected yet this week.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                      {shortcutAnalytics.top_shortcuts.slice(0, 12).map((item, index) => {
+                        const shortcutLabels: Record<string, string> = {
+                          "channel-letters": "Channel Letters",
+                          "monument": "Monument Sign",
+                          "dimensional": "Dimensional Letters",
+                          "led-neon": "LED/Neon Sign",
+                          "outdoor": "Outdoor Sign",
+                          "not-sure": "Not Sure",
+                          "cabinets": "Cabinets/Lightboxes",
+                          "installation": "Installation",
+                          "fabrication": "Fabrication",
+                          "led-electrical": "LED/Electrical",
+                          "materials": "Materials",
+                          "estimating": "Estimating",
+                          "design": "Design",
+                          "brokering": "Brokering",
+                          "all": "All Services",
+                          "other": "Other",
+                        };
+                        const label = shortcutLabels[item.shortcut] || item.shortcut.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+                        const isTop3 = index < 3;
+                        
+                        return (
+                          <div
+                            key={item.shortcut}
+                            className={`border rounded-lg p-3 ${isTop3 ? "border-cyan-500/50 bg-cyan-500/5" : "border-border"}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-foreground font-medium">{label}</span>
+                              {isTop3 && (
+                                <span className="text-xs px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">
+                                  #{index + 1}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 flex items-baseline gap-1">
+                              <span className="text-xl font-bold text-primary">{item.count}</span>
+                              <span className="text-xs text-muted-foreground">selections</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

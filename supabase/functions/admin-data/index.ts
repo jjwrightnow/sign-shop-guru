@@ -179,6 +179,27 @@ serve(async (req) => {
         (u: any) => (u.spam_flags || 0) > 0 || (u.off_topic_count || 0) >= 3
       );
 
+      // Calculate shortcut analytics for the past week
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const oneWeekAgoStr = oneWeekAgo.toISOString();
+      
+      const recentConversations = (conversationsResult.data || []).filter(
+        (c: any) => c.created_at >= oneWeekAgoStr && c.shortcut_selected
+      );
+      
+      // Count shortcut selections
+      const shortcutCounts: Record<string, number> = {};
+      recentConversations.forEach((c: any) => {
+        const shortcut = c.shortcut_selected;
+        shortcutCounts[shortcut] = (shortcutCounts[shortcut] || 0) + 1;
+      });
+      
+      // Sort by count and get top shortcuts
+      const topShortcuts = Object.entries(shortcutCounts)
+        .map(([shortcut, count]) => ({ shortcut, count }))
+        .sort((a, b) => b.count - a.count);
+
       return new Response(
         JSON.stringify({
           users: usersResult.data || [],
@@ -213,6 +234,10 @@ serve(async (req) => {
             product_counts: productCounts,
             custom_instructions_count: customInstructions.length,
             custom_instructions_samples: customInstructions.slice(0, 10)
+          },
+          shortcut_analytics: {
+            total_this_week: recentConversations.length,
+            top_shortcuts: topShortcuts,
           },
           suggested_followups: suggestedFollowupsResult.data || [],
           knowledge_gaps: knowledgeGapsResult.data || [],
