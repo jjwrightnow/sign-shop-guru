@@ -47,7 +47,7 @@ const ConversationSidebar = ({
   return (
     <div
       className={cn(
-        "h-full border-r border-border flex flex-col transition-all duration-300",
+        "h-screen sticky top-0 border-r border-border flex flex-col transition-all duration-300",
         isCollapsed ? "w-14" : "w-64"
       )}
       style={{ backgroundColor: '#1a1a1a' }}
