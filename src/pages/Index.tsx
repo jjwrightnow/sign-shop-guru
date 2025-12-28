@@ -7,6 +7,7 @@ import IntakeFormModal from "@/components/IntakeFormModal";
 import ConversationSidebar from "@/components/ConversationSidebar";
 import OptInPrompt from "@/components/OptInPrompt";
 import TrainMePanel from "@/components/TrainMePanel";
+import QuickStartPrompts from "@/components/QuickStartPrompts";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -450,6 +451,11 @@ const Index = () => {
     userData.experienceLevel !== 'shopper' && 
     userData.intent !== 'shopping';
 
+  // Check if user is a shopper and this is a fresh conversation (only welcome message)
+  const isShopper = userData && 
+    (userData.experienceLevel === 'shopper' || userData.intent === 'shopping');
+  const showQuickStart = isShopper && messages.length === 1 && !messages[0]?.isUser && !isTyping;
+
   return (
     <div className="flex min-h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
@@ -499,6 +505,12 @@ const Index = () => {
                   messageId={message.dbId}
                 />
               ))}
+              
+              {/* Quick-start prompts for shoppers on fresh conversation */}
+              {showQuickStart && (
+                <QuickStartPrompts onSelectPrompt={handleSend} />
+              )}
+              
               {isTyping && <TypingIndicator />}
               
               {/* Value-first opt-in prompt after 5+ exchanges */}
