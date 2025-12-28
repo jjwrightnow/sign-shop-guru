@@ -3,12 +3,15 @@ import { ThumbsUp, ThumbsDown, Zap, User, Check, ExternalLink } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { GlossaryHighlighter } from "./GlossaryHighlighter";
 
 interface ChatMessageProps {
   content: string;
   isUser: boolean;
   showFeedback?: boolean;
   messageId?: string;
+  userId?: string;
+  conversationId?: string;
 }
 
 // Parse message content for images and text
@@ -65,7 +68,7 @@ const parseMessageContent = (content: string) => {
   return parts.length > 0 ? parts : [{ type: 'text' as const, content }];
 };
 
-const ChatMessage = ({ content, isUser, showFeedback = false, messageId }: ChatMessageProps) => {
+const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId, conversationId }: ChatMessageProps) => {
   const { toast } = useToast();
   const [feedbackGiven, setFeedbackGiven] = useState<"helpful" | "not_helpful" | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
@@ -163,6 +166,19 @@ const ChatMessage = ({ content, isUser, showFeedback = false, messageId }: ChatM
                   <ExternalLink className="w-3 h-3" />
                 </a>
                 <span className="text-xs text-muted-foreground ml-1">({part.source})</span>
+              </p>
+            );
+          }
+          
+          // For assistant messages, use glossary highlighter
+          if (!isUser) {
+            return (
+              <p key={index} className="text-sm leading-relaxed whitespace-pre-wrap">
+                <GlossaryHighlighter 
+                  text={part.content} 
+                  userId={userId}
+                  conversationId={conversationId}
+                />
               </p>
             );
           }

@@ -1,4 +1,4 @@
-import { Zap, GraduationCap, Mail } from "lucide-react";
+import { Zap, GraduationCap, Mail, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatHeaderProps {
@@ -9,6 +9,7 @@ interface ChatHeaderProps {
   transcriptSending?: boolean;
   transcriptAlreadySent?: boolean;
   userEmail?: string;
+  onGlossaryClick?: () => void;
 }
 
 const ChatHeader = ({ 
@@ -18,7 +19,8 @@ const ChatHeader = ({
   onEmailTranscript,
   transcriptSending,
   transcriptAlreadySent,
-  userEmail
+  userEmail,
+  onGlossaryClick
 }: ChatHeaderProps) => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
@@ -41,6 +43,16 @@ const ChatHeader = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onGlossaryClick && (
+            <button
+              onClick={onGlossaryClick}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+              title="View glossary"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Glossary</span>
+            </button>
+          )}
           {onEmailTranscript && (
             <button
               onClick={onEmailTranscript}

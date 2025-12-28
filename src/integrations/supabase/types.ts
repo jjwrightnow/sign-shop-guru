@@ -299,6 +299,91 @@ export type Database = {
           },
         ]
       }
+      glossary: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          full_definition: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          related_terms: string[] | null
+          short_definition: string
+          term: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          full_definition?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          related_terms?: string[] | null
+          short_definition: string
+          term: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          full_definition?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          related_terms?: string[] | null
+          short_definition?: string
+          term?: string
+        }
+        Relationships: []
+      }
+      glossary_analytics: {
+        Row: {
+          action: string
+          conversation_id: string | null
+          created_at: string | null
+          id: string
+          term_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          term_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          conversation_id?: string | null
+          created_at?: string | null
+          id?: string
+          term_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "glossary_analytics_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "glossary_analytics_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "glossary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "glossary_analytics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       image_search_cache: {
         Row: {
           created_at: string | null
