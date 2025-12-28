@@ -122,7 +122,9 @@ serve(async (req) => {
         knowledgeGapsResult,
         conversationPatternsResult,
         insightsReportsResult,
-        alertsResult
+        alertsResult,
+        glossaryResult,
+        glossaryAnalyticsResult
       ] = await Promise.all([
         supabase.from('users').select('*').order('created_at', { ascending: false }),
         supabase.from('conversations').select('*').order('created_at', { ascending: false }),
@@ -139,7 +141,9 @@ serve(async (req) => {
         supabase.from('knowledge_gaps').select('*').order('frequency', { ascending: false }).limit(100),
         supabase.from('conversation_patterns').select('*').order('usage_count', { ascending: false }),
         supabase.from('insights_reports').select('*').order('created_at', { ascending: false }).limit(10),
-        supabase.from('alerts').select('*').order('sent_at', { ascending: false }).limit(20)
+        supabase.from('alerts').select('*').order('sent_at', { ascending: false }).limit(20),
+        supabase.from('glossary').select('*').order('term', { ascending: true }),
+        supabase.from('glossary_analytics').select('term_id, action').order('created_at', { ascending: false }).limit(1000)
       ])
 
       // Calculate training stats
@@ -243,7 +247,17 @@ serve(async (req) => {
           knowledge_gaps: knowledgeGapsResult.data || [],
           conversation_patterns: conversationPatternsResult.data || [],
           insights_reports: insightsReportsResult.data || [],
-          recent_alerts: alertsResult.data || []
+          recent_alerts: alertsResult.data || [],
+          glossary_terms: glossaryResult.data || [],
+          glossary_analytics: (() => {
+            const analytics: Record<string, { hovers: number; clicks: number }> = {};
+            (glossaryAnalyticsResult.data || []).forEach((a: any) => {
+              if (!analytics[a.term_id]) analytics[a.term_id] = { hovers: 0, clicks: 0 };
+              if (a.action === 'hover') analytics[a.term_id].hovers++;
+              if (a.action === 'click') analytics[a.term_id].clicks++;
+            });
+            return analytics;
+          })()
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )

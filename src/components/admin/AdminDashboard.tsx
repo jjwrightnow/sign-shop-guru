@@ -27,6 +27,8 @@ import {
   FlaskConical,
   Trash2,
   Copy,
+  BookOpen,
+  Eye,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -239,8 +241,22 @@ interface Alert {
   sent_at: string;
 }
 
+interface GlossaryTerm {
+  id: string;
+  term: string;
+  short_definition: string;
+  full_definition: string | null;
+  category: string | null;
+  related_terms: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  hover_count?: number;
+  click_count?: number;
+}
+
 const B2B_STATUSES = ['new', 'contacted', 'demo_scheduled', 'closed_won', 'closed_lost'];
 const REFERRAL_STATUSES = ['new', 'referred', 'contacted', 'quoted', 'won', 'lost'];
+const GLOSSARY_CATEGORIES = ['letter_types', 'lighting_styles', 'components', 'mounting', 'materials', 'electrical', 'sign_types', 'fabrication', 'installation'];
 
 const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
   const { toast } = useToast();
@@ -297,6 +313,11 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
     total_this_week: number;
     top_shortcuts: { shortcut: string; count: number }[];
   }>({ total_this_week: 0, top_shortcuts: [] });
+  const [glossaryTerms, setGlossaryTerms] = useState<GlossaryTerm[]>([]);
+  const [glossaryAnalytics, setGlossaryAnalytics] = useState<Record<string, { hovers: number; clicks: number }>>({});
+  const [editingTerm, setEditingTerm] = useState<string | null>(null);
+  const [showAddTerm, setShowAddTerm] = useState(false);
+  const [newTerm, setNewTerm] = useState({ term: '', short_definition: '', full_definition: '', category: 'components', related_terms: '' });
 
   useEffect(() => {
     fetchAllData();
@@ -448,6 +469,12 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
       }
       if (data.shortcut_analytics) {
         setShortcutAnalytics(data.shortcut_analytics);
+      }
+      if (data.glossary_terms) {
+        setGlossaryTerms(data.glossary_terms);
+      }
+      if (data.glossary_analytics) {
+        setGlossaryAnalytics(data.glossary_analytics);
       }
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -869,6 +896,7 @@ const AdminDashboard = ({ onLogout, adminToken }: AdminDashboardProps) => {
                 <TabsTrigger value="b2b">B2B Inquiries</TabsTrigger>
                 <TabsTrigger value="referrals">Referrals</TabsTrigger>
                 <TabsTrigger value="partners">Partners</TabsTrigger>
+                <TabsTrigger value="glossary">Glossary</TabsTrigger>
                 <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
                 <TabsTrigger value="training">Training Stats</TabsTrigger>
                 <TabsTrigger value="conversations">Conversations</TabsTrigger>

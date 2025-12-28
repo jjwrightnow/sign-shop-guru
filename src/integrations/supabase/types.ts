@@ -813,6 +813,7 @@ export type Database = {
           created_at: string | null
           email: string
           experience_level: string
+          help_areas: string[] | null
           id: string
           intent: string
           last_message_at: string | null
@@ -823,12 +824,16 @@ export type Database = {
           off_topic_count: number | null
           phone: string | null
           project_type: string | null
+          role: string | null
           services: string[] | null
+          sign_type_interest: string | null
           spam_flags: number | null
           tier: string | null
           timeline: string | null
+          title: string | null
           topic_focus: string | null
           tos_accepted: boolean | null
+          user_type: string | null
         }
         Insert: {
           business_name?: string | null
@@ -836,6 +841,7 @@ export type Database = {
           created_at?: string | null
           email: string
           experience_level: string
+          help_areas?: string[] | null
           id?: string
           intent: string
           last_message_at?: string | null
@@ -846,12 +852,16 @@ export type Database = {
           off_topic_count?: number | null
           phone?: string | null
           project_type?: string | null
+          role?: string | null
           services?: string[] | null
+          sign_type_interest?: string | null
           spam_flags?: number | null
           tier?: string | null
           timeline?: string | null
+          title?: string | null
           topic_focus?: string | null
           tos_accepted?: boolean | null
+          user_type?: string | null
         }
         Update: {
           business_name?: string | null
@@ -859,6 +869,7 @@ export type Database = {
           created_at?: string | null
           email?: string
           experience_level?: string
+          help_areas?: string[] | null
           id?: string
           intent?: string
           last_message_at?: string | null
@@ -869,12 +880,16 @@ export type Database = {
           off_topic_count?: number | null
           phone?: string | null
           project_type?: string | null
+          role?: string | null
           services?: string[] | null
+          sign_type_interest?: string | null
           spam_flags?: number | null
           tier?: string | null
           timeline?: string | null
+          title?: string | null
           topic_focus?: string | null
           tos_accepted?: boolean | null
+          user_type?: string | null
         }
         Relationships: []
       }
