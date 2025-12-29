@@ -137,6 +137,63 @@ export type Database = {
           },
         ]
       }
+      catalog_uploads: {
+        Row: {
+          file_name: string
+          file_type: string | null
+          file_url: string | null
+          id: string
+          manufacturer_id: string | null
+          notes: string | null
+          pages_processed: number | null
+          processed_at: string | null
+          products_extracted: number | null
+          status: string | null
+          uploaded_at: string | null
+        }
+        Insert: {
+          file_name: string
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          manufacturer_id?: string | null
+          notes?: string | null
+          pages_processed?: number | null
+          processed_at?: string | null
+          products_extracted?: number | null
+          status?: string | null
+          uploaded_at?: string | null
+        }
+        Update: {
+          file_name?: string
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          manufacturer_id?: string | null
+          notes?: string | null
+          pages_processed?: number | null
+          processed_at?: string | null
+          products_extracted?: number | null
+          status?: string | null
+          uploaded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_uploads_manufacturer_id_fkey"
+            columns: ["manufacturer_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_profiles"
+            referencedColumns: ["manufacturer_id"]
+          },
+          {
+            foreignKeyName: "catalog_uploads_manufacturer_id_fkey"
+            columns: ["manufacturer_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_patterns: {
         Row: {
           conversion_rate: number | null
@@ -183,6 +240,7 @@ export type Database = {
           offers_shown: string[] | null
           referral_completed: boolean | null
           referral_pending: boolean | null
+          session_id: string | null
           shortcut_selected: string | null
           transcript_emailed: boolean | null
           transcript_emailed_at: string | null
@@ -198,6 +256,7 @@ export type Database = {
           offers_shown?: string[] | null
           referral_completed?: boolean | null
           referral_pending?: boolean | null
+          session_id?: string | null
           shortcut_selected?: string | null
           transcript_emailed?: boolean | null
           transcript_emailed_at?: string | null
@@ -213,6 +272,7 @@ export type Database = {
           offers_shown?: string[] | null
           referral_completed?: boolean | null
           referral_pending?: boolean | null
+          session_id?: string | null
           shortcut_selected?: string | null
           transcript_emailed?: boolean | null
           transcript_emailed_at?: string | null
@@ -228,6 +288,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      depth_recommendations: {
+        Row: {
+          height_max: number | null
+          height_min: number | null
+          id: string
+          max_depth: number | null
+          min_depth: number | null
+          recommended_depth: number | null
+        }
+        Insert: {
+          height_max?: number | null
+          height_min?: number | null
+          id?: string
+          max_depth?: number | null
+          min_depth?: number | null
+          recommended_depth?: number | null
+        }
+        Update: {
+          height_max?: number | null
+          height_min?: number | null
+          id?: string
+          max_depth?: number | null
+          min_depth?: number | null
+          recommended_depth?: number | null
+        }
+        Relationships: []
       }
       feedback: {
         Row: {
@@ -260,6 +347,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      finishes: {
+        Row: {
+          code: string
+          compatible_materials: string[] | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          code: string
+          compatible_materials?: string[] | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          code?: string
+          compatible_materials?: string[] | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
       }
       followup_clicks: {
         Row: {
@@ -301,6 +409,7 @@ export type Database = {
       }
       glossary: {
         Row: {
+          aliases: string[] | null
           category: string | null
           created_at: string | null
           full_definition: string | null
@@ -312,6 +421,7 @@ export type Database = {
           term: string
         }
         Insert: {
+          aliases?: string[] | null
           category?: string | null
           created_at?: string | null
           full_definition?: string | null
@@ -323,6 +433,7 @@ export type Database = {
           term: string
         }
         Update: {
+          aliases?: string[] | null
           category?: string | null
           created_at?: string | null
           full_definition?: string | null
@@ -468,6 +579,135 @@ export type Database = {
         }
         Relationships: []
       }
+      led_colors: {
+        Row: {
+          code: string
+          hex_code: string | null
+          is_standard: boolean | null
+          kelvin: number | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          code: string
+          hex_code?: string | null
+          is_standard?: boolean | null
+          kelvin?: number | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          code?: string
+          hex_code?: string | null
+          is_standard?: boolean | null
+          kelvin?: number | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      lighting_profiles: {
+        Row: {
+          binary_code: string
+          created_at: string | null
+          description: string | null
+          icon_url: string | null
+          id: string
+          is_active: boolean | null
+          layers_count: number | null
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          binary_code: string
+          created_at?: string | null
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          layers_count?: number | null
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          binary_code?: string
+          created_at?: string | null
+          description?: string | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          layers_count?: number | null
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      manufacturers: {
+        Row: {
+          catalog_updated_at: string | null
+          catalog_url: string | null
+          catalog_version: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          name: string
+          notes: string | null
+          price_tier: string | null
+          slug: string
+          website: string | null
+        }
+        Insert: {
+          catalog_updated_at?: string | null
+          catalog_url?: string | null
+          catalog_version?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name: string
+          notes?: string | null
+          price_tier?: string | null
+          slug: string
+          website?: string | null
+        }
+        Update: {
+          catalog_updated_at?: string | null
+          catalog_url?: string | null
+          catalog_version?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          name?: string
+          notes?: string | null
+          price_tier?: string | null
+          slug?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      materials: {
+        Row: {
+          category: string | null
+          code: string
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          category?: string | null
+          code: string
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          category?: string | null
+          code?: string
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           content: string
@@ -541,6 +781,155 @@ export type Database = {
           services?: string[] | null
         }
         Relationships: []
+      }
+      pricing: {
+        Row: {
+          created_at: string | null
+          depth_inches: number | null
+          height_inches: number | null
+          id: string
+          material: string | null
+          price: number | null
+          product_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          depth_inches?: number | null
+          height_inches?: number | null
+          id?: string
+          material?: string | null
+          price?: number | null
+          product_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          depth_inches?: number | null
+          height_inches?: number | null
+          id?: string
+          material?: string | null
+          price?: number | null
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pricing_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products_full"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          catalog_page: string | null
+          category: string | null
+          construction: string | null
+          created_at: string | null
+          depth_options: number[] | null
+          finishes: string[] | null
+          has_pricing: boolean | null
+          has_trim_cap: boolean | null
+          height_max: number | null
+          height_min: number | null
+          id: string
+          is_active: boolean | null
+          led_options: string[] | null
+          manufacturer_id: string | null
+          materials: string[] | null
+          name: string
+          notes: string | null
+          price_unit: string | null
+          profile_id: string | null
+          reveal_options: number[] | null
+          slug: string
+          updated_at: string | null
+        }
+        Insert: {
+          catalog_page?: string | null
+          category?: string | null
+          construction?: string | null
+          created_at?: string | null
+          depth_options?: number[] | null
+          finishes?: string[] | null
+          has_pricing?: boolean | null
+          has_trim_cap?: boolean | null
+          height_max?: number | null
+          height_min?: number | null
+          id?: string
+          is_active?: boolean | null
+          led_options?: string[] | null
+          manufacturer_id?: string | null
+          materials?: string[] | null
+          name: string
+          notes?: string | null
+          price_unit?: string | null
+          profile_id?: string | null
+          reveal_options?: number[] | null
+          slug: string
+          updated_at?: string | null
+        }
+        Update: {
+          catalog_page?: string | null
+          category?: string | null
+          construction?: string | null
+          created_at?: string | null
+          depth_options?: number[] | null
+          finishes?: string[] | null
+          has_pricing?: boolean | null
+          has_trim_cap?: boolean | null
+          height_max?: number | null
+          height_min?: number | null
+          id?: string
+          is_active?: boolean | null
+          led_options?: string[] | null
+          manufacturer_id?: string | null
+          materials?: string[] | null
+          name?: string
+          notes?: string | null
+          price_unit?: string | null
+          profile_id?: string | null
+          reveal_options?: number[] | null
+          slug?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_manufacturer_id_fkey"
+            columns: ["manufacturer_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_profiles"
+            referencedColumns: ["manufacturer_id"]
+          },
+          {
+            foreignKeyName: "products_manufacturer_id_fkey"
+            columns: ["manufacturer_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "lighting_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_profiles"
+            referencedColumns: ["profile_id"]
+          },
+        ]
       }
       referrals: {
         Row: {
@@ -690,6 +1079,60 @@ export type Database = {
           },
         ]
       }
+      spec_sheets: {
+        Row: {
+          company_logo_url: string | null
+          company_name: string | null
+          configuration: Json
+          created_at: string | null
+          downloaded_count: number | null
+          emailed_count: number | null
+          id: string
+          pdf_url: string | null
+          profile_id: string | null
+          reference_number: string | null
+        }
+        Insert: {
+          company_logo_url?: string | null
+          company_name?: string | null
+          configuration: Json
+          created_at?: string | null
+          downloaded_count?: number | null
+          emailed_count?: number | null
+          id?: string
+          pdf_url?: string | null
+          profile_id?: string | null
+          reference_number?: string | null
+        }
+        Update: {
+          company_logo_url?: string | null
+          company_name?: string | null
+          configuration?: Json
+          created_at?: string | null
+          downloaded_count?: number | null
+          emailed_count?: number | null
+          id?: string
+          pdf_url?: string | null
+          profile_id?: string | null
+          reference_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spec_sheets_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "lighting_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "spec_sheets_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_profiles"
+            referencedColumns: ["profile_id"]
+          },
+        ]
+      }
       suggested_followups: {
         Row: {
           category: string | null
@@ -808,7 +1251,9 @@ export type Database = {
       }
       users: {
         Row: {
+          auth_id: string | null
           business_name: string | null
+          company: string | null
           contacted: boolean | null
           created_at: string | null
           email: string
@@ -816,6 +1261,7 @@ export type Database = {
           help_areas: string[] | null
           id: string
           intent: string
+          is_verified: boolean | null
           last_message_at: string | null
           last_message_date: string | null
           location: string | null
@@ -828,6 +1274,7 @@ export type Database = {
           services: string[] | null
           sign_type_interest: string | null
           spam_flags: number | null
+          subscription_tier: string | null
           tier: string | null
           timeline: string | null
           title: string | null
@@ -836,7 +1283,9 @@ export type Database = {
           user_type: string | null
         }
         Insert: {
+          auth_id?: string | null
           business_name?: string | null
+          company?: string | null
           contacted?: boolean | null
           created_at?: string | null
           email: string
@@ -844,6 +1293,7 @@ export type Database = {
           help_areas?: string[] | null
           id?: string
           intent: string
+          is_verified?: boolean | null
           last_message_at?: string | null
           last_message_date?: string | null
           location?: string | null
@@ -856,6 +1306,7 @@ export type Database = {
           services?: string[] | null
           sign_type_interest?: string | null
           spam_flags?: number | null
+          subscription_tier?: string | null
           tier?: string | null
           timeline?: string | null
           title?: string | null
@@ -864,7 +1315,9 @@ export type Database = {
           user_type?: string | null
         }
         Update: {
+          auth_id?: string | null
           business_name?: string | null
+          company?: string | null
           contacted?: boolean | null
           created_at?: string | null
           email?: string
@@ -872,6 +1325,7 @@ export type Database = {
           help_areas?: string[] | null
           id?: string
           intent?: string
+          is_verified?: boolean | null
           last_message_at?: string | null
           last_message_date?: string | null
           location?: string | null
@@ -884,6 +1338,7 @@ export type Database = {
           services?: string[] | null
           sign_type_interest?: string | null
           spam_flags?: number | null
+          subscription_tier?: string | null
           tier?: string | null
           timeline?: string | null
           title?: string | null
@@ -895,7 +1350,83 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      manufacturer_profiles: {
+        Row: {
+          binary_code: string | null
+          depth_options: number[] | null
+          height_max: number | null
+          height_min: number | null
+          manufacturer_id: string | null
+          manufacturer_name: string | null
+          materials: string[] | null
+          price_tier: string | null
+          profile_id: string | null
+          profile_name: string | null
+          slug: string | null
+        }
+        Relationships: []
+      }
+      products_full: {
+        Row: {
+          catalog_page: string | null
+          category: string | null
+          construction: string | null
+          created_at: string | null
+          depth_options: number[] | null
+          finishes: string[] | null
+          has_pricing: boolean | null
+          has_trim_cap: boolean | null
+          height_max: number | null
+          height_min: number | null
+          id: string | null
+          is_active: boolean | null
+          led_options: string[] | null
+          manufacturer_id: string | null
+          manufacturer_name: string | null
+          manufacturer_price_tier: string | null
+          manufacturer_slug: string | null
+          materials: string[] | null
+          name: string | null
+          notes: string | null
+          price_unit: string | null
+          profile_code: string | null
+          profile_id: string | null
+          profile_name: string | null
+          reveal_options: number[] | null
+          slug: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_manufacturer_id_fkey"
+            columns: ["manufacturer_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_profiles"
+            referencedColumns: ["manufacturer_id"]
+          },
+          {
+            foreignKeyName: "products_manufacturer_id_fkey"
+            columns: ["manufacturer_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "lighting_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "manufacturer_profiles"
+            referencedColumns: ["profile_id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never
