@@ -702,11 +702,6 @@ const IndexContent = () => {
           onGlossaryClick={userData ? handleGlossaryClick : undefined}
         />
         
-        {/* Persistent mode bar - always visible when user is logged in */}
-        {userData && (
-          <ModeBar activeMode={selectedMode} onSelectMode={handleModeSelect} />
-        )}
-        
         <main className="flex-1 overflow-y-auto">
           <div className="container max-w-4xl mx-auto py-6 px-4">
             <div className="flex flex-col gap-4">
@@ -748,6 +743,11 @@ const IndexContent = () => {
             </div>
           </div>
         </main>
+        
+        {/* Mode bar above input */}
+        {userData && (
+          <ModeBar activeMode={selectedMode} onSelectMode={handleModeSelect} />
+        )}
         
         <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
       </div>
