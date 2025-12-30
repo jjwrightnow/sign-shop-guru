@@ -1,5 +1,6 @@
-import { Zap, GraduationCap, Mail, BookOpen } from "lucide-react";
+import { Zap, GraduationCap, Mail, BookOpen, Lightbulb, Wrench, Factory } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChatMode } from "@/components/ModeSelector";
 
 interface ChatHeaderProps {
   onTrainMeClick?: () => void;
@@ -10,7 +11,15 @@ interface ChatHeaderProps {
   transcriptAlreadySent?: boolean;
   userEmail?: string;
   onGlossaryClick?: () => void;
+  activeMode?: ChatMode | null;
 }
+
+const modeConfig: Record<ChatMode, { icon: typeof Lightbulb; label: string; color: string }> = {
+  learn: { icon: Lightbulb, label: "Learn", color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30" },
+  specs: { icon: Wrench, label: "Specs", color: "text-blue-400 bg-blue-400/10 border-blue-400/30" },
+  quote: { icon: Lightbulb, label: "Quote", color: "text-green-400 bg-green-400/10 border-green-400/30" },
+  suppliers: { icon: Factory, label: "Suppliers", color: "text-purple-400 bg-purple-400/10 border-purple-400/30" },
+};
 
 const ChatHeader = ({ 
   onTrainMeClick, 
@@ -20,7 +29,8 @@ const ChatHeader = ({
   transcriptSending,
   transcriptAlreadySent,
   userEmail,
-  onGlossaryClick
+  onGlossaryClick,
+  activeMode
 }: ChatHeaderProps) => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
@@ -43,6 +53,20 @@ const ChatHeader = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Mode indicator badge */}
+          {activeMode && activeMode !== 'quote' && (
+            (() => {
+              const config = modeConfig[activeMode];
+              const Icon = config.icon;
+              return (
+                <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${config.color}`}>
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="font-medium">{config.label}</span>
+                </span>
+              );
+            })()
+          )}
+          
           {onGlossaryClick && (
             <button
               onClick={onGlossaryClick}
