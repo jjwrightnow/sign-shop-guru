@@ -10,6 +10,7 @@ import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
 import ModeSelector, { ChatMode } from "@/components/ModeSelector";
+import ModeBar from "@/components/ModeBar";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
@@ -535,28 +536,67 @@ const IndexContent = () => {
   const showModeSelector = isFreshConversation && !isTyping && !selectedMode;
 
   // Handle mode selection
-  const handleModeSelect = (mode: ChatMode) => {
+  const handleModeSelect = async (mode: ChatMode) => {
     if (mode === 'quote') {
+      // Track quote selection before redirect
+      if (userData) {
+        try {
+          await supabase.from("mode_selections").insert({
+            user_id: userData.userId,
+            conversation_id: userData.conversationId,
+            mode: 'quote',
+            previous_mode: selectedMode,
+          });
+        } catch (error) {
+          console.error("Error tracking mode selection:", error);
+        }
+      }
       // Quote mode: redirect directly to FastLetter.bot
       window.open('https://fastletter.bot', '_blank');
       return;
     }
     
+    const previousMode = selectedMode;
     setSelectedMode(mode);
     
-    // Show a contextual message based on mode
-    const modeMessages: Record<ChatMode, string> = {
-      learn: "Great! I'm here to help you learn about signs, materials, and processes. What would you like to know?",
-      specs: "I'll pull detailed specs for you. What product are you looking at?",
-      quote: "", // Won't be shown
-      suppliers: "I can help you explore manufacturers and suppliers. What are you looking for?",
-    };
+    // Track mode selection analytics
+    if (userData) {
+      try {
+        await supabase.from("mode_selections").insert({
+          user_id: userData.userId,
+          conversation_id: userData.conversationId,
+          mode,
+          previous_mode: previousMode,
+        });
+      } catch (error) {
+        console.error("Error tracking mode selection:", error);
+      }
+    }
     
-    setMessages(prev => [...prev, { 
-      id: `mode-${Date.now()}`, 
-      content: modeMessages[mode], 
-      isUser: false 
-    }]);
+    // Only show mode message on initial selection or mode switch
+    if (previousMode !== mode) {
+      const modeMessages: Record<ChatMode, string> = {
+        learn: "Great! I'm here to help you learn about signs, materials, and processes. What would you like to know?",
+        specs: "I'll pull detailed specs for you. What product are you looking at?",
+        quote: "", // Won't be shown
+        suppliers: "I can help you explore manufacturers and suppliers. What are you looking for?",
+      };
+      
+      // Only add message if switching modes (not first selection on fresh convo with welcome)
+      if (previousMode !== null) {
+        setMessages(prev => [...prev, { 
+          id: `mode-${Date.now()}`, 
+          content: `Switched to ${mode} mode. ${modeMessages[mode]}`, 
+          isUser: false 
+        }]);
+      } else {
+        setMessages(prev => [...prev, { 
+          id: `mode-${Date.now()}`, 
+          content: modeMessages[mode], 
+          isUser: false 
+        }]);
+      }
+    }
   };
 
   const handleShortcutSelect = async (shortcut: { value: string; prompt: string }) => {
@@ -660,8 +700,12 @@ const IndexContent = () => {
           transcriptAlreadySent={transcriptAlreadySent}
           userEmail={userData?.email}
           onGlossaryClick={userData ? handleGlossaryClick : undefined}
-          activeMode={selectedMode}
         />
+        
+        {/* Persistent mode bar - always visible when user is logged in */}
+        {userData && (
+          <ModeBar activeMode={selectedMode} onSelectMode={handleModeSelect} />
+        )}
         
         <main className="flex-1 overflow-y-auto">
           <div className="container max-w-4xl mx-auto py-6 px-4">
@@ -677,11 +721,6 @@ const IndexContent = () => {
                   conversationId={userData?.conversationId}
                 />
               ))}
-              
-              {/* Mode selector for fresh conversation before mode is selected */}
-              {showModeSelector && (
-                <ModeSelector onSelectMode={handleModeSelect} />
-              )}
               
               {/* Smart shortcuts for all user types on fresh conversation after mode is selected */}
               {showSmartShortcuts && smartShortcutType && (
