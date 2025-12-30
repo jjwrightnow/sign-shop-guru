@@ -58,7 +58,10 @@ const IndexContent = () => {
   const [followUpSkipped, setFollowUpSkipped] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
   const [showFullGlossary, setShowFullGlossary] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<ChatMode | null>(null);
+  const [selectedMode, setSelectedMode] = useState<ChatMode | null>(() => {
+    const savedMode = localStorage.getItem("signmaker_preferred_mode");
+    return savedMode as ChatMode | null;
+  });
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -559,6 +562,9 @@ const IndexContent = () => {
     const previousMode = selectedMode;
     setSelectedMode(mode);
     
+    // Persist mode preference in localStorage
+    localStorage.setItem("signmaker_preferred_mode", mode);
+    
     // Track mode selection analytics
     if (userData) {
       try {
@@ -571,6 +577,27 @@ const IndexContent = () => {
       } catch (error) {
         console.error("Error tracking mode selection:", error);
       }
+    }
+    
+    // Mode labels for display
+    const modeLabels: Record<ChatMode, string> = {
+      learn: "Learn",
+      specs: "Specs",
+      quote: "Quote",
+      suppliers: "Suppliers",
+    };
+    
+    // Show toast notification on mode change
+    if (previousMode !== null && previousMode !== mode) {
+      toast({
+        description: `Switched to ${modeLabels[mode]} mode`,
+        duration: 2000,
+      });
+    } else if (previousMode === null) {
+      toast({
+        description: `${modeLabels[mode]} mode activated`,
+        duration: 2000,
+      });
     }
     
     // Only show mode message on initial selection or mode switch
