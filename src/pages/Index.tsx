@@ -660,6 +660,7 @@ const IndexContent = () => {
           transcriptAlreadySent={transcriptAlreadySent}
           userEmail={userData?.email}
           onGlossaryClick={userData ? handleGlossaryClick : undefined}
+          activeMode={selectedMode}
         />
         
         <main className="flex-1 overflow-y-auto">
