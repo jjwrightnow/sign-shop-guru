@@ -15,7 +15,7 @@ const modes: { mode: ChatMode; icon: typeof Lightbulb; label: string }[] = [
 
 const ModeBar = ({ activeMode, onSelectMode }: ModeBarProps) => {
   return (
-    <div className="sticky top-16 z-40 w-full border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+    <div className="w-full border-t border-border bg-surface">
       <div className="container max-w-4xl mx-auto px-4 py-2">
         <div className="flex items-center justify-center gap-2">
           {modes.map((item) => {
@@ -28,7 +28,7 @@ const ModeBar = ({ activeMode, onSelectMode }: ModeBarProps) => {
                 onClick={() => onSelectMode(item.mode)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
+                    ? "bg-blue-500 text-white shadow-sm"
                     : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
