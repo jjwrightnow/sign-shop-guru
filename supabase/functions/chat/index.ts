@@ -396,9 +396,9 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { question, user_context, conversation_id } = await req.json()
+    const { question, mode, user_context, conversation_id } = await req.json()
 
-    console.log('Received chat request:', { question: question?.substring(0, 50), conversation_id })
+    console.log('Received chat request:', { question: question?.substring(0, 50), mode, conversation_id })
 
     // Input validation - must be a string
     if (!question || typeof question !== 'string') {
@@ -733,6 +733,59 @@ serve(async (req) => {
     const isShopperUser = isShopperByIntent || isShopperByExperience;
     const messageCount = conversationMessages.length;
 
+    // ========== MODE-SPECIFIC CONTEXT ==========
+    let modeContext = '';
+    const chatMode = mode || 'learn';
+    
+    switch (chatMode) {
+      case 'specs':
+        // Query relevant product data for specs mode
+        const { data: specsData } = await supabase
+          .from('products_full')
+          .select('name, manufacturer_name, materials, depth_options, height_min, height_max, led_options, finishes, category, profile_name')
+          .eq('is_active', true)
+          .limit(50);
+        
+        if (specsData && specsData.length > 0) {
+          modeContext = `\n\nMODE: PRODUCT SPECIFICATIONS
+You have access to detailed product specs. Reference this data when answering:
+
+AVAILABLE PRODUCTS:
+${specsData.map((p: any) => 
+  `- ${p.name} (${p.manufacturer_name || 'Unknown'}): ${p.category || 'General'}, Profile: ${p.profile_name || 'N/A'}, Heights: ${p.height_min || '?'}-${p.height_max || '?'}", Materials: ${(p.materials || []).join(', ') || 'N/A'}`
+).slice(0, 20).join('\n')}
+
+Be specific about dimensions, materials, and options when answering.`;
+        }
+        break;
+        
+      case 'suppliers':
+        // Load manufacturer overview for suppliers mode
+        const { data: manufacturers } = await supabase
+          .from('manufacturers')
+          .select('name, slug, price_tier, website, notes')
+          .eq('is_active', true);
+        
+        if (manufacturers && manufacturers.length > 0) {
+          modeContext = `\n\nMODE: SUPPLIERS & MANUFACTURERS
+Provide neutral, factual information about manufacturers. DO NOT rank or recommend specific brands.
+
+KNOWN MANUFACTURERS:
+${manufacturers.map((m: any) => 
+  `- ${m.name}: ${m.notes || 'No description available'}`
+).join('\n')}
+
+Remember: Stay neutral. Acknowledge they exist, describe their focus, but never say "X is the best" or compare quality.`;
+        }
+        break;
+        
+      case 'learn':
+      default:
+        modeContext = `\n\nMODE: EDUCATION
+Focus on teaching concepts clearly. No product lookups needed - use your knowledge to explain signs, materials, processes, and industry concepts.`;
+        break;
+    }
+
     // REACTIVE ONLY - Only help with referrals/B2B when user explicitly asks
     const referralGuidance = referralPending ? `
 
@@ -803,6 +856,7 @@ Name: ${user_context?.name || 'Unknown'}
 Experience: ${user_context?.experience_level || 'Unknown'}
 Intent: ${user_context?.intent || 'Unknown'}
 Messages: ${messageCount}
+${modeContext}
 ${customContextSection}
 ${referralGuidance}
 ${b2bGuidance}
