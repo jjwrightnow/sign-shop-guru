@@ -57,11 +57,12 @@ serve(async (req) => {
     }
 
     // Get user info if user_id provided
+    // NOTE: We do NOT return phone data - all contact is via email only
     let userInfo = null
     if (user_id) {
       const { data } = await supabase
         .from('users')
-        .select('name, email, phone, business_name, intent, experience_level')
+        .select('name, email, business_name, intent, experience_level')
         .eq('id', user_id)
         .single()
       userInfo = data
@@ -105,7 +106,6 @@ serve(async (req) => {
       <table style="width: 100%; border-collapse: collapse;">
         <tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666; width: 120px;">Name</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${userInfo.name || 'N/A'}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Email</td><td style="padding: 8px; border-bottom: 1px solid #eee;"><a href="mailto:${userInfo.email}">${userInfo.email}</a></td></tr>
-        ${userInfo.phone ? `<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Phone</td><td style="padding: 8px; border-bottom: 1px solid #eee;"><a href="tel:${userInfo.phone}">${userInfo.phone}</a></td></tr>` : ''}
         ${userInfo.business_name ? `<tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Business</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${userInfo.business_name}</td></tr>` : ''}
         <tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Intent</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${userInfo.intent || 'N/A'}</td></tr>
         <tr><td style="padding: 8px; border-bottom: 1px solid #eee; color: #666;">Experience</td><td style="padding: 8px; border-bottom: 1px solid #eee;">${userInfo.experience_level || 'N/A'}</td></tr>

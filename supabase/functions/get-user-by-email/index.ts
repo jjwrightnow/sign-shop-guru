@@ -28,9 +28,10 @@ serve(async (req) => {
 
     // Fetch user by email - only return non-sensitive fields
     // Use order + limit instead of maybeSingle to handle duplicate emails gracefully
+    // NOTE: We do NOT return phone data - all contact is via email only
     const { data: users, error } = await supabase
       .from('users')
-      .select('id, name, experience_level, intent, phone')
+      .select('id, name, experience_level, intent')
       .eq('email', email)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -58,8 +59,7 @@ serve(async (req) => {
           id: user.id,
           name: user.name,
           experience_level: user.experience_level,
-          intent: user.intent,
-          phone: user.phone ? true : false // Only return whether phone exists, not the actual number
+          intent: user.intent
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

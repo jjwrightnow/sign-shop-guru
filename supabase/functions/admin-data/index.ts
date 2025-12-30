@@ -494,10 +494,6 @@ serve(async (req) => {
               <td style="padding: 8px 0;">${userEmail}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
-              <td style="padding: 8px 0;">${data.phone || 'Not provided'}</td>
-            </tr>
-            <tr>
               <td style="padding: 8px 0; font-weight: bold; color: #666;">Project Type:</td>
               <td style="padding: 8px 0;">${data.project_type || 'Not provided'}</td>
             </tr>
@@ -508,10 +504,6 @@ serve(async (req) => {
             <tr>
               <td style="padding: 8px 0; font-weight: bold; color: #666;">Timeline:</td>
               <td style="padding: 8px 0;">${data.timeline || 'Not provided'}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time to Call:</td>
-              <td style="padding: 8px 0;">${data.best_time_to_call || 'Not provided'}</td>
             </tr>
             <tr>
               <td style="padding: 8px 0; font-weight: bold; color: #666;">Notes:</td>

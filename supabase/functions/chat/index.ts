@@ -62,15 +62,13 @@ async function sendNotificationEmail(
 }
 
 // Extract referral data from conversation history
+// NOTE: We do NOT collect phone numbers - all contact is via email only
 function extractReferralData(messages: { role: string; content: string }[]): {
   location_city?: string;
   location_state?: string;
   project_type?: string;
   timeline?: string;
-  phone?: string;
   email?: string;
-  best_time_to_call?: string;
-  preferred_contact?: string;
   timezone?: string;
   notes?: string;
 } {
@@ -96,9 +94,7 @@ function extractReferralData(messages: { role: string; content: string }[]): {
   const emailMatch = allUserText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
   if (emailMatch) data.email = emailMatch[1];
   
-  // Phone pattern
-  const phoneMatch = allUserText.match(/(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/);
-  if (phoneMatch) data.phone = phoneMatch[1];
+  // NOTE: We do NOT collect phone numbers - all contact is via email only
   
   // Timeline patterns
   const timelinePatterns = [
@@ -127,45 +123,8 @@ function extractReferralData(messages: { role: string; content: string }[]): {
     }
   }
   
-  // Best time to contact
-  const timePatterns = [
-    /(?:best time|call me|reach me|contact me|available)\s*(?:is\s+)?(?:at\s+)?([^.!?\n]+(?:morning|afternoon|evening|am|pm|\d+)[^.!?\n]*)/i,
-    /(morning|afternoon|evening|anytime)/i
-  ];
-  for (const pattern of timePatterns) {
-    const match = allUserText.match(pattern);
-    if (match) {
-      data.best_time_to_call = match[1]?.trim();
-      break;
-    }
-  }
-  
-  // Preferred contact method
-  const preferPhonePatterns = [
-    /prefer\s*(?:to\s+be\s+)?(?:contacted\s+)?(?:by\s+)?phone/i,
-    /(?:call|phone)\s*(?:is\s+)?(?:best|preferred|better)/i,
-    /rather\s+(?:be\s+)?called/i
-  ];
-  const preferEmailPatterns = [
-    /prefer\s*(?:to\s+be\s+)?(?:contacted\s+)?(?:by\s+)?email/i,
-    /email\s*(?:is\s+)?(?:best|preferred|better)/i,
-    /rather\s+(?:receive\s+)?(?:an\s+)?email/i
-  ];
-  
-  for (const pattern of preferPhonePatterns) {
-    if (pattern.test(allUserText)) {
-      data.preferred_contact = 'phone';
-      break;
-    }
-  }
-  if (!data.preferred_contact) {
-    for (const pattern of preferEmailPatterns) {
-      if (pattern.test(allUserText)) {
-        data.preferred_contact = 'email';
-        break;
-      }
-    }
-  }
+  // NOTE: We do NOT collect phone numbers or offer phone calls
+  // All contact is via email only to ensure clear written communication
   
   // Timezone patterns
   const timezonePatterns = [
@@ -228,11 +187,9 @@ function extractB2BData(messages: { role: string; content: string }[]): {
     }
   }
   
-  // Contact info (phone or email)
-  const phoneMatch = allUserText.match(/(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/);
+  // Contact info - email only (we don't collect phone numbers)
   const emailMatch = allUserText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
   if (emailMatch) data.contact_info = emailMatch[1];
-  else if (phoneMatch) data.contact_info = phoneMatch[1];
   
   // Interest type
   const interestPatterns = [
@@ -515,7 +472,7 @@ serve(async (req) => {
     if (conversation.user_id) {
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('id, name, email, phone, messages_today, last_message_date, last_message_at, tier, off_topic_count, spam_flags')
+        .select('id, name, email, messages_today, last_message_date, last_message_at, tier, off_topic_count, spam_flags')
         .eq('id', conversation.user_id)
         .maybeSingle();
 
@@ -784,9 +741,9 @@ User has requested a referral. Continue collecting:
 - Location (city/state)
 - Project type
 - Timeline
-- Phone number
-- Preferred contact method
-- Best time to call
+- Email address
+
+NOTE: We do NOT collect phone numbers. All contact is via email only.
 
 After they provide info, include [REFERRAL_SUBMIT] marker and confirm.
 ` : '';
@@ -951,6 +908,7 @@ MARKER RULES:
       console.log('Extracted referral data:', referralData);
       
       // Save to referrals table with dedicated columns
+      // NOTE: We do NOT collect phone numbers - all contact is via email only
       const referralRecord = {
         user_id: conversation.user_id,
         conversation_id: conversation_id,
@@ -958,11 +916,11 @@ MARKER RULES:
         location_state: referralData.location_state || null,
         project_type: referralData.project_type || null,
         timeline: referralData.timeline || null,
-        phone: referralData.phone || userData?.phone || null,
+        phone: null, // We never collect phone numbers
         email: referralData.email || userData?.email || null,
         timezone: referralData.timezone || null,
-        preferred_contact: referralData.preferred_contact || null,
-        best_time_to_call: referralData.best_time_to_call || null,
+        preferred_contact: 'email', // Always email - we don't offer phone calls
+        best_time_to_call: null, // Not applicable - email only
         notes: referralData.notes || null,
         status: 'new'
       };
@@ -978,12 +936,8 @@ MARKER RULES:
         referralCompleted = true;
         referralPending = false;
         
-        // Determine best contact info to display
+        // Determine best contact info to display - email only
         const contactEmail = referralData.email || userData?.email || 'Not provided';
-        const contactPhone = referralData.phone || userData?.phone || null;
-        const preferredContact = referralData.preferred_contact 
-          ? referralData.preferred_contact.charAt(0).toUpperCase() + referralData.preferred_contact.slice(1)
-          : (contactPhone ? 'Phone' : 'Email');
         const timezone = referralData.timezone || 'Not provided';
         
         // Send email notification to ask@signmaker.ai
@@ -1003,18 +957,6 @@ MARKER RULES:
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Email:</td>
                 <td style="padding: 8px 0;">${contactEmail}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Phone:</td>
-                <td style="padding: 8px 0;">${contactPhone || 'Not provided'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666; background-color: #f0f9ff;">Preferred Contact:</td>
-                <td style="padding: 8px 0; background-color: #f0f9ff;"><strong>${preferredContact}</strong></td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; color: #666;">Best Time:</td>
-                <td style="padding: 8px 0;">${referralData.best_time_to_call || 'Not provided'}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; color: #666;">Timezone:</td>
