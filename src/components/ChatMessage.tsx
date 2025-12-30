@@ -99,8 +99,17 @@ const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId,
 
   const parsedContent = parseMessageContent(content);
 
+  // Check if this is a mode switch message
+  const isModeMessage = content.startsWith("Switched to") || 
+    content.includes("I'm here to help you learn") ||
+    content.includes("I'll pull detailed specs") ||
+    content.includes("I can help you explore manufacturers");
+
   return (
-    <div className={cn("flex gap-3 w-full", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn(
+      "flex gap-3 w-full animate-fade-in",
+      isUser ? "justify-end" : "justify-start"
+    )}>
       {!isUser && (
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
           <Zap className="w-4 h-4 text-primary" />
@@ -108,10 +117,11 @@ const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId,
       )}
       
       <div className={cn(
-        "max-w-[80%] md:max-w-[70%] rounded-xl px-4 py-3",
+        "max-w-[80%] md:max-w-[70%] rounded-xl px-4 py-3 transition-all duration-300",
         isUser 
           ? "bg-bubble-user border border-bubble-user-border text-foreground" 
-          : "bg-bubble-assistant text-foreground"
+          : "bg-bubble-assistant text-foreground",
+        isModeMessage && "border-l-2 border-l-blue-500 bg-blue-500/5"
       )}>
         {parsedContent.map((part, index) => {
           if (part.type === 'image' && part.url && !imageErrors.has(part.url)) {
