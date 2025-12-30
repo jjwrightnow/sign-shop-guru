@@ -137,13 +137,13 @@ const IndexContent = () => {
     }
   };
 
-  // Show opt-in prompt after 5+ messages (10 messages = 5 exchanges)
+  // Show opt-in prompt after 5+ messages (only once, not after dismissal)
   useEffect(() => {
     const userMessages = messages.filter(m => m.isUser).length;
-    if (userMessages >= 5 && !optInDismissed && !showOptIn) {
+    if (userMessages >= 5 && !optInDismissed) {
       setShowOptIn(true);
     }
-  }, [messages, optInDismissed, showOptIn]);
+  }, [messages, optInDismissed]);
 
   const loadUserConversations = async (userId: string) => {
     setIsLoadingConversations(true);
@@ -597,6 +597,8 @@ const IndexContent = () => {
             onSelectConversation={handleSelectConversation}
             onNewChat={handleNewChat}
             isLoading={isLoadingConversations}
+            showOptIn={showOptIn}
+            onOptInDismiss={handleOptInDismiss}
           />
           
           {/* Train Me Panel - only for sign professionals */}
@@ -659,15 +661,6 @@ const IndexContent = () => {
               
               {isTyping && <TypingIndicator />}
               
-              {/* Value-first opt-in prompt after 5+ exchanges */}
-              {showOptIn && userData && !isTyping && (
-                <OptInPrompt
-                  userId={userData.userId}
-                  conversationId={userData.conversationId}
-                  onDismiss={handleOptInDismiss}
-                  onComplete={handleOptInComplete}
-                />
-              )}
               
               <div ref={messagesEndRef} />
             </div>

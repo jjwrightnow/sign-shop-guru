@@ -3,6 +3,7 @@ import { MessageSquare, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import OptInPrompt from "@/components/OptInPrompt";
 
 interface Conversation {
   id: string;
@@ -17,6 +18,8 @@ interface ConversationSidebarProps {
   onSelectConversation: (id: string) => void;
   onNewChat: () => void;
   isLoading?: boolean;
+  showOptIn?: boolean;
+  onOptInDismiss?: () => void;
 }
 
 const ConversationSidebar = ({
@@ -25,6 +28,8 @@ const ConversationSidebar = ({
   onSelectConversation,
   onNewChat,
   isLoading,
+  showOptIn = false,
+  onOptInDismiss,
 }: ConversationSidebarProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -52,6 +57,11 @@ const ConversationSidebar = ({
       )}
       style={{ backgroundColor: '#1a1a1a' }}
     >
+      {/* Opt-in prompt - above header */}
+      {showOptIn && onOptInDismiss && (
+        <OptInPrompt onDismiss={onOptInDismiss} isCollapsed={isCollapsed} />
+      )}
+
       {/* Header */}
       <div className="p-3 border-b border-border flex items-center justify-between">
         {!isCollapsed && (
