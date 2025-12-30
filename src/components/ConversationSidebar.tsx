@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageSquare, Plus, ChevronLeft, ChevronRight, Mail, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -151,6 +151,27 @@ const ConversationSidebar = ({
           )}
         </div>
       </ScrollArea>
+
+      {/* Privacy Notice */}
+      {!isCollapsed && (
+        <div className="p-3 border-t border-border">
+          <div className="flex items-start gap-2 text-xs text-muted-foreground">
+            <ShieldCheck className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground/80">Email-Only Communication</p>
+              <p className="leading-relaxed">
+                We never ask for phone numbers and will never call you. All communication is in writing via{" "}
+                <a 
+                  href="mailto:ask@signmaker.ai" 
+                  className="text-primary hover:underline"
+                >
+                  ask@signmaker.ai
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
