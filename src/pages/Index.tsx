@@ -9,6 +9,7 @@ import OptInPrompt from "@/components/OptInPrompt";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
+import ModeSelector, { ChatMode } from "@/components/ModeSelector";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,6 +57,7 @@ const IndexContent = () => {
   const [followUpSkipped, setFollowUpSkipped] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
   const [showFullGlossary, setShowFullGlossary] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<ChatMode | null>(null);
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -265,6 +267,7 @@ const IndexContent = () => {
     setShortcutsSkipped(false);
     setSelectedShortcut(null);
     setFollowUpSkipped(false);
+    setSelectedMode(null); // Reset mode for new session
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
     setMessageCount(0);
 
@@ -304,6 +307,7 @@ const IndexContent = () => {
       setShortcutsSkipped(false);
       setSelectedShortcut(null);
       setFollowUpSkipped(false);
+      setSelectedMode(null); // Reset mode for new chat
 
       // Refresh conversations list
       await loadUserConversations(userData.userId);
@@ -320,6 +324,12 @@ const IndexContent = () => {
   const handleSend = async (content: string) => {
     if (!userData) return;
 
+    // Quote mode: redirect directly to FastLetter.bot
+    if (selectedMode === 'quote') {
+      window.open('https://fastletter.bot', '_blank');
+      return;
+    }
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       content,
@@ -333,6 +343,7 @@ const IndexContent = () => {
       const { data, error } = await supabase.functions.invoke("chat", {
         body: {
           question: content,
+          mode: selectedMode || 'learn', // Pass mode to edge function
           user_context: {
             name: userData.name,
             experience_level: userData.experienceLevel,
@@ -518,7 +529,35 @@ const IndexContent = () => {
 
   const smartShortcutType = getSmartShortcutType();
   const isFreshConversation = messages.length === 1 && !messages[0]?.isUser;
-  const showSmartShortcuts = smartShortcutType && isFreshConversation && !isTyping && !shortcutsSkipped;
+  const showSmartShortcuts = smartShortcutType && isFreshConversation && !isTyping && !shortcutsSkipped && selectedMode;
+  
+  // Show mode selector on fresh conversation before mode is selected
+  const showModeSelector = isFreshConversation && !isTyping && !selectedMode;
+
+  // Handle mode selection
+  const handleModeSelect = (mode: ChatMode) => {
+    if (mode === 'quote') {
+      // Quote mode: redirect directly to FastLetter.bot
+      window.open('https://fastletter.bot', '_blank');
+      return;
+    }
+    
+    setSelectedMode(mode);
+    
+    // Show a contextual message based on mode
+    const modeMessages: Record<ChatMode, string> = {
+      learn: "Great! I'm here to help you learn about signs, materials, and processes. What would you like to know?",
+      specs: "I'll pull detailed specs for you. What product are you looking at?",
+      quote: "", // Won't be shown
+      suppliers: "I can help you explore manufacturers and suppliers. What are you looking for?",
+    };
+    
+    setMessages(prev => [...prev, { 
+      id: `mode-${Date.now()}`, 
+      content: modeMessages[mode], 
+      isUser: false 
+    }]);
+  };
 
   const handleShortcutSelect = async (shortcut: { value: string; prompt: string }) => {
     if (!userData) return;
@@ -638,7 +677,12 @@ const IndexContent = () => {
                 />
               ))}
               
-              {/* Smart shortcuts for all user types on fresh conversation */}
+              {/* Mode selector for fresh conversation before mode is selected */}
+              {showModeSelector && (
+                <ModeSelector onSelectMode={handleModeSelect} />
+              )}
+              
+              {/* Smart shortcuts for all user types on fresh conversation after mode is selected */}
               {showSmartShortcuts && smartShortcutType && (
                 <SmartShortcuts 
                   userType={smartShortcutType}
