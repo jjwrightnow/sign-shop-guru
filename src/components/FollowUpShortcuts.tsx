@@ -1,7 +1,7 @@
 import { 
   Sparkles, Ruler, Palette, DollarSign, Clock, Wrench, 
   Zap, Box, Building2, Truck, HelpCircle, Users, ShieldCheck,
-  Lightbulb, Settings, MapPin, Phone
+  Lightbulb, Settings, MapPin, Mail
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -144,31 +144,31 @@ const freelancerFollowUps: Record<string, FollowUpShortcut[]> = {
     { icon: MapPin, label: "Service Area", prompt: "I serve the following area..." },
     { icon: Wrench, label: "Equipment/Lift", prompt: "I have the following equipment: ladder/lift/crane..." },
     { icon: Users, label: "Crew Size", prompt: "I work solo / have a crew of..." },
-    { icon: Phone, label: "Contact Method", prompt: "The best way to reach me is..." },
+    { icon: Mail, label: "Email Contact", prompt: "The best way to reach me is by email at..." },
   ],
   "fabrication": [
     { icon: MapPin, label: "Location", prompt: "My shop is located in..." },
     { icon: Settings, label: "Capabilities", prompt: "My fabrication capabilities include..." },
     { icon: Clock, label: "Turnaround", prompt: "My typical turnaround time is..." },
-    { icon: Phone, label: "Contact Info", prompt: "Here's how to reach me for jobs..." },
+    { icon: Mail, label: "Email Contact", prompt: "Here's my email for job inquiries..." },
   ],
   "design": [
     { icon: Palette, label: "Portfolio", prompt: "I can share my portfolio or samples..." },
     { icon: Settings, label: "Software", prompt: "I work with the following design software..." },
     { icon: Clock, label: "Turnaround", prompt: "My typical design turnaround is..." },
-    { icon: Phone, label: "Contact Method", prompt: "The best way to send me design requests is..." },
+    { icon: Mail, label: "Email Contact", prompt: "The best way to send me design requests is by email..." },
   ],
   "brokering": [
     { icon: MapPin, label: "Territory", prompt: "I broker in the following territory..." },
     { icon: Users, label: "Vendor Network", prompt: "I have vendors for the following sign types..." },
     { icon: Building2, label: "Client Types", prompt: "I typically work with these client types..." },
-    { icon: Phone, label: "Contact Info", prompt: "Here's how to send me opportunities..." },
+    { icon: Mail, label: "Email Contact", prompt: "Here's my email to send me opportunities..." },
   ],
   "all": [
     { icon: Wrench, label: "Primary Service", prompt: "My primary service is..." },
     { icon: MapPin, label: "Location/Area", prompt: "I'm based in / serve..." },
     { icon: Users, label: "Availability", prompt: "My current availability is..." },
-    { icon: Phone, label: "Best Contact", prompt: "The best way to reach me is..." },
+    { icon: Mail, label: "Email Contact", prompt: "The best way to reach me is by email at..." },
   ],
 };
 

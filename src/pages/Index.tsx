@@ -85,8 +85,9 @@ const IndexContent = () => {
 
           const user = userData.user;
           
-          // Check if user already has phone (already opted in)
-          if (user.phone) {
+          // Check if user previously dismissed opt-in
+          const optInDismissedStored = localStorage.getItem("signmaker_optin_dismissed");
+          if (optInDismissedStored === "true") {
             setOptInDismissed(true);
           }
 
@@ -410,12 +411,9 @@ const IndexContent = () => {
   const handleOptInDismiss = () => {
     setShowOptIn(false);
     setOptInDismissed(true);
+    localStorage.setItem("signmaker_optin_dismissed", "true");
   };
 
-  const handleOptInComplete = () => {
-    setShowOptIn(false);
-    setOptInDismissed(true);
-  };
 
   const handleTrainMeClick = () => {
     setShowTrainMe(true);
