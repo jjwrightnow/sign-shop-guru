@@ -40,7 +40,7 @@ const ModeBar = ({ activeMode, onSelectMode }: ModeBarProps) => {
                           : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground hover:scale-102"
                       }`}
                     >
-                      <Icon className={`h-3.5 w-3.5 transition-transform duration-200 ${isActive ? "animate-pulse" : ""}`} />
+                      <Icon className="h-3.5 w-3.5" />
                       <span>{item.label}</span>
                     </button>
                   </TooltipTrigger>
