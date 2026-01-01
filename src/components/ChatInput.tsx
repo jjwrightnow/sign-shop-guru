@@ -87,9 +87,9 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
                 "transition-all duration-200",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
                 "active:scale-95",
-                isListening
-                  ? "bg-red-500 text-white animate-pulse"
-                  : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+            isListening
+              ? "bg-red-500 text-white"
+              : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
               )}
               title={isListening ? "Stop listening" : "Start voice input"}
             >
