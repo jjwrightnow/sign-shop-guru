@@ -778,43 +778,70 @@ export type Database = {
           catalog_updated_at: string | null
           catalog_url: string | null
           catalog_version: string | null
+          category: string | null
           created_at: string | null
+          entity_name: string | null
+          headquarters_location: string | null
           id: string
           is_active: boolean | null
           logo_url: string | null
+          materials_used: string | null
           name: string
           notes: string | null
           price_tier: string | null
+          products_manufactured: string | null
+          region: string | null
           slug: string
+          status: string | null
+          updated_at: string | null
           website: string | null
+          website_url: string | null
         }
         Insert: {
           catalog_updated_at?: string | null
           catalog_url?: string | null
           catalog_version?: string | null
+          category?: string | null
           created_at?: string | null
+          entity_name?: string | null
+          headquarters_location?: string | null
           id?: string
           is_active?: boolean | null
           logo_url?: string | null
+          materials_used?: string | null
           name: string
           notes?: string | null
           price_tier?: string | null
+          products_manufactured?: string | null
+          region?: string | null
           slug: string
+          status?: string | null
+          updated_at?: string | null
           website?: string | null
+          website_url?: string | null
         }
         Update: {
           catalog_updated_at?: string | null
           catalog_url?: string | null
           catalog_version?: string | null
+          category?: string | null
           created_at?: string | null
+          entity_name?: string | null
+          headquarters_location?: string | null
           id?: string
           is_active?: boolean | null
           logo_url?: string | null
+          materials_used?: string | null
           name?: string
           notes?: string | null
           price_tier?: string | null
+          products_manufactured?: string | null
+          region?: string | null
           slug?: string
+          status?: string | null
+          updated_at?: string | null
           website?: string | null
+          website_url?: string | null
         }
         Relationships: []
       }
