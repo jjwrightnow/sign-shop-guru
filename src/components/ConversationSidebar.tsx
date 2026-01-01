@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { MessageSquare, Plus, ChevronLeft, ChevronRight, Mail, ShieldCheck } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { MessageSquare, Plus, ChevronLeft, ChevronRight, ShieldCheck, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,6 +32,7 @@ const ConversationSidebar = ({
   showOptIn = false,
   onOptInDismiss,
 }: ConversationSidebarProps) => {
+  const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const formatDate = (dateString: string) => {
@@ -93,6 +95,21 @@ const ConversationSidebar = ({
         >
           <Plus className="h-4 w-4" />
           {!isCollapsed && <span className="ml-2">New Chat</span>}
+        </Button>
+      </div>
+
+      {/* My Notes Button */}
+      <div className="px-2">
+        <Button
+          onClick={() => navigate("/notes")}
+          variant="ghost"
+          className={cn(
+            "w-full justify-start text-muted-foreground hover:text-foreground",
+            isCollapsed ? "px-0 justify-center" : ""
+          )}
+        >
+          <FileText className="h-4 w-4" />
+          {!isCollapsed && <span className="ml-2">📝 My Notes</span>}
         </Button>
       </div>
 

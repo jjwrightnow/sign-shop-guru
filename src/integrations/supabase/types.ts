@@ -710,6 +710,54 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_notes: {
+        Row: {
+          company_id: string | null
+          content: string
+          created_at: string | null
+          id: string
+          note_type: string | null
+          tags: string[] | null
+          user_id: string | null
+          visibility: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          note_type?: string | null
+          tags?: string[] | null
+          user_id?: string | null
+          visibility?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          note_type?: string | null
+          tags?: string[] | null
+          user_id?: string | null
+          visibility?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_notes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       led_colors: {
         Row: {
           code: string

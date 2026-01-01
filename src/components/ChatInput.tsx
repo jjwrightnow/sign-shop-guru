@@ -1,6 +1,7 @@
-import { useState, KeyboardEvent } from "react";
-import { Send } from "lucide-react";
+import { useState, useEffect, KeyboardEvent } from "react";
+import { Send, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -9,11 +10,21 @@ interface ChatInputProps {
 
 const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
   const [message, setMessage] = useState("");
+  const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } =
+    useSpeechRecognition();
+
+  // Update message when transcript changes from voice input
+  useEffect(() => {
+    if (transcript) {
+      setMessage(transcript);
+    }
+  }, [transcript]);
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
       onSend(message.trim());
       setMessage("");
+      resetTranscript();
     }
   };
 
@@ -21,6 +32,15 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleToggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      resetTranscript();
+      startListening();
     }
   };
 
@@ -33,7 +53,7 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask your sign industry question..."
+              placeholder={isListening ? "Listening..." : "Ask your sign industry question..."}
               disabled={disabled}
               rows={1}
               className={cn(
@@ -42,7 +62,8 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
                 "transition-all duration-200",
                 "focus:neon-glow",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
-                "min-h-[48px] max-h-[200px]"
+                "min-h-[48px] max-h-[200px]",
+                isListening && "border-red-500/50 ring-1 ring-red-500/30"
               )}
               style={{
                 height: "auto",
@@ -55,6 +76,27 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
               }}
             />
           </div>
+          
+          {/* Voice input button */}
+          {isSupported && (
+            <button
+              onClick={handleToggleListening}
+              disabled={disabled}
+              className={cn(
+                "flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center",
+                "transition-all duration-200",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "active:scale-95",
+                isListening
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+              )}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </button>
+          )}
+          
           <button
             onClick={handleSend}
             disabled={!message.trim() || disabled}
