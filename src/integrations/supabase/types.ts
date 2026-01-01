@@ -35,6 +35,57 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_response_feedback: {
+        Row: {
+          applied_to_knowledge: boolean | null
+          company_id: string | null
+          correction_text: string | null
+          created_at: string | null
+          feedback_type: string | null
+          id: string
+          message_id: string | null
+          reviewed_by: string | null
+          user_id: string | null
+        }
+        Insert: {
+          applied_to_knowledge?: boolean | null
+          company_id?: string | null
+          correction_text?: string | null
+          created_at?: string | null
+          feedback_type?: string | null
+          id?: string
+          message_id?: string | null
+          reviewed_by?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          applied_to_knowledge?: boolean | null
+          company_id?: string | null
+          correction_text?: string | null
+          created_at?: string | null
+          feedback_type?: string | null
+          id?: string
+          message_id?: string | null
+          reviewed_by?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_response_feedback_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_response_feedback_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alerts: {
         Row: {
           alert_type: string
@@ -194,6 +245,33 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          created_at: string | null
+          domain: string | null
+          id: string
+          name: string
+          subscription_tier: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          domain?: string | null
+          id?: string
+          name: string
+          subscription_tier?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          domain?: string | null
+          id?: string
+          name?: string
+          subscription_tier?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       conversation_patterns: {
         Row: {
           conversion_rate: number | null
@@ -315,6 +393,59 @@ export type Database = {
           recommended_depth?: number | null
         }
         Relationships: []
+      }
+      expert_knowledge: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          expert_id: string | null
+          id: string
+          knowledge_text: string
+          knowledge_type: string | null
+          question_pattern: string | null
+          scope: string
+          topic: string
+          updated_at: string | null
+          upvotes: number | null
+          verified: boolean | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          expert_id?: string | null
+          id?: string
+          knowledge_text: string
+          knowledge_type?: string | null
+          question_pattern?: string | null
+          scope: string
+          topic: string
+          updated_at?: string | null
+          upvotes?: number | null
+          verified?: boolean | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          expert_id?: string | null
+          id?: string
+          knowledge_text?: string
+          knowledge_type?: string | null
+          question_pattern?: string | null
+          scope?: string
+          topic?: string
+          updated_at?: string | null
+          upvotes?: number | null
+          verified?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expert_knowledge_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feedback: {
         Row: {
@@ -1291,6 +1422,41 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          company_id: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          company_id?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          company_id?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       users: {
         Row: {
           auth_id: string | null
@@ -1471,10 +1637,25 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      get_user_company_id: { Args: { _user_id: string }; Returns: string }
+      has_company_role: {
+        Args: {
+          _company_id: string
+          _roles: Database["public"]["Enums"]["app_role"][]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "platform_admin" | "company_admin" | "expert" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1601,6 +1782,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["platform_admin", "company_admin", "expert", "user"],
+    },
   },
 } as const
