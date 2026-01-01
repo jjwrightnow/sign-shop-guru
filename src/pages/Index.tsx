@@ -11,6 +11,8 @@ import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
 import ModeSelector, { ChatMode } from "@/components/ModeSelector";
 import ModeBar from "@/components/ModeBar";
+import ModeBadge from "@/components/ModeBadge";
+import QuoteRedirectCard from "@/components/QuoteRedirectCard";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +23,7 @@ interface Message {
   content: string;
   isUser: boolean;
   dbId?: string;
+  mode?: ChatMode; // Track which mode produced this response
 }
 
 interface UserData {
@@ -62,6 +65,12 @@ const IndexContent = () => {
     const savedMode = localStorage.getItem("signmaker_preferred_mode");
     return savedMode as ChatMode | null;
   });
+  // Manual mode lock - tracks user-selected mode and remaining locked turns
+  const [manualMode, setManualMode] = useState<ChatMode | null>(null);
+  const [manualModeTurns, setManualModeTurns] = useState(0);
+  // Show quote redirect card when quote mode detected
+  const [showQuoteCard, setShowQuoteCard] = useState(false);
+  
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -328,11 +337,25 @@ const IndexContent = () => {
   const handleSend = async (content: string) => {
     if (!userData) return;
 
-    // Quote mode: redirect directly to FastLetter.bot
+    // Quote mode: show redirect card instead of sending
     if (selectedMode === 'quote') {
-      window.open('https://fastletter.bot', '_blank');
+      setShowQuoteCard(true);
       return;
     }
+    
+    // Determine effective mode (manual lock overrides)
+    let effectiveMode: ChatMode = selectedMode || 'learn';
+    if (manualMode && manualModeTurns > 0) {
+      effectiveMode = manualMode;
+      setManualModeTurns(prev => prev - 1);
+      // Clear manual mode if expired
+      if (manualModeTurns <= 1) {
+        setManualMode(null);
+      }
+    }
+    
+    // Hide quote card when sending a regular message
+    setShowQuoteCard(false);
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -347,7 +370,7 @@ const IndexContent = () => {
       const { data, error } = await supabase.functions.invoke("chat", {
         body: {
           question: content,
-          mode: selectedMode || 'learn', // Pass mode to edge function
+          mode: effectiveMode, // Pass effective mode (respecting manual lock)
           user_context: {
             name: userData.name,
             experience_level: userData.experienceLevel,
@@ -378,6 +401,7 @@ const IndexContent = () => {
         content: data.response,
         isUser: false,
         dbId: dbMessageId,
+        mode: effectiveMode, // Track which mode produced this response
       };
       setMessages((prev) => [...prev, assistantMessage]);
       setMessageCount((prev) => prev + 1);
@@ -562,6 +586,13 @@ const IndexContent = () => {
     const previousMode = selectedMode;
     setSelectedMode(mode);
     
+    // Set manual mode lock for 2 turns when user explicitly selects
+    setManualMode(mode);
+    setManualModeTurns(2);
+    
+    // Hide quote card when switching modes
+    setShowQuoteCard(false);
+    
     // Persist mode preference in localStorage
     localStorage.setItem("signmaker_preferred_mode", mode);
     
@@ -733,16 +764,31 @@ const IndexContent = () => {
           <div className="container max-w-4xl mx-auto py-6 px-4">
             <div className="flex flex-col gap-4">
               {messages.map((message, index) => (
-                <ChatMessage
-                  key={message.id}
-                  content={message.content}
-                  isUser={message.isUser}
-                  showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
-                  messageId={message.dbId}
-                  userId={userData?.userId}
-                  conversationId={userData?.conversationId}
-                />
+                <div key={message.id} className="flex flex-col gap-1">
+                  {/* Mode badge above AI responses */}
+                  {!message.isUser && message.mode && (
+                    <div className="ml-0">
+                      <ModeBadge mode={message.mode} />
+                    </div>
+                  )}
+                  <ChatMessage
+                    content={message.content}
+                    isUser={message.isUser}
+                    showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
+                    messageId={message.dbId}
+                    userId={userData?.userId}
+                    conversationId={userData?.conversationId}
+                  />
+                </div>
               ))}
+              
+              {/* Quote redirect card */}
+              {showQuoteCard && (
+                <QuoteRedirectCard 
+                  onEscapeToSpecs={() => { setSelectedMode('specs'); setShowQuoteCard(false); }}
+                  onEscapeToLearn={() => { setSelectedMode('learn'); setShowQuoteCard(false); }}
+                />
+              )}
               
               {/* Smart shortcuts for all user types on fresh conversation after mode is selected */}
               {showSmartShortcuts && smartShortcutType && (

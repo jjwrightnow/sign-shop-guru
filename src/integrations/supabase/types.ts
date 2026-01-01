@@ -898,6 +898,36 @@ export type Database = {
           },
         ]
       }
+      mode_keywords: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          keyword: string
+          match_type: string | null
+          mode: string
+          weight: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          keyword: string
+          match_type?: string | null
+          mode: string
+          weight?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          keyword?: string
+          match_type?: string | null
+          mode?: string
+          weight?: number | null
+        }
+        Relationships: []
+      }
       mode_selections: {
         Row: {
           conversation_id: string | null
