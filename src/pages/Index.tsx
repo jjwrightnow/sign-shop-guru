@@ -9,6 +9,8 @@ import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
 import ContextPanel, { type ContextMode } from "@/components/ContextPanel";
+import SelectionGrid from "@/components/SelectionGrid";
+import SpecSummary from "@/components/SpecSummary";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,9 +58,13 @@ const IndexContent = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextMode, setContextMode] = useState<ContextMode>("dropzone");
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [currentStage, setCurrentStage] = useState(0);
+  const [specs, setSpecs] = useState<Record<string, string>>({});
+  const [selectionVisible, setSelectionVisible] = useState(true);
   
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -491,6 +497,19 @@ const IndexContent = () => {
     if (file) setContextMode("artwork");
   };
 
+  const handleSelectionGridSelect = (value: string) => {
+    if (textareaRef.current) {
+      // Update both the DOM value and React state via native input event
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, 'value'
+      )?.set;
+      nativeInputValueSetter?.call(textareaRef.current, value);
+      textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+      textareaRef.current.focus();
+    }
+    setSelectionVisible(false);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
@@ -525,70 +544,117 @@ const IndexContent = () => {
       {/* Header */}
       <ChatHeader onMenuClick={userData ? () => setMenuOpen(true) : undefined} />
       
-      {/* Zone 1 — Chat messages (scrollable) */}
-      <main className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-[760px] mx-auto py-6 px-4">
-          <div className="flex flex-col gap-6">
-            {messages.map((message, index) => (
-              <ChatMessage
-                key={message.id}
-                content={message.content}
-                isUser={message.isUser}
-                showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
-                messageId={message.dbId}
-                userId={userData?.userId}
-                conversationId={userData?.conversationId}
-              />
-            ))}
-            
-            {showSmartShortcuts && smartShortcutType && (
-              <SmartShortcuts 
-                userType={smartShortcutType}
-                onSelectShortcut={handleShortcutSelect}
-                onSkip={handleShortcutsSkip}
-              />
-            )}
-
-            {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
-              <FollowUpShortcuts
-                initialSelection={selectedShortcut}
-                userType={smartShortcutType}
-                onSelectShortcut={handleFollowUpSelect}
-                onSkip={handleFollowUpSkip}
-              />
-            )}
-            
-            {isTyping && <TypingIndicator />}
-            
-            <div ref={messagesEndRef} />
-          </div>
+      {/* Three-column grid */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] overflow-hidden">
+        
+        {/* Left column — selection grid */}
+        <div className="hidden lg:flex flex-col overflow-y-auto p-2 border-r border-border/40">
+          <SelectionGrid
+            stage={currentStage}
+            visible={selectionVisible}
+            onSelect={handleSelectionGridSelect}
+          />
         </div>
-      </main>
-      
-      {/* Zone 2 — Input bar */}
-      <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
 
-      {/* Debug mode switcher (dev only) */}
-      {isDev && (
-        <div className="max-w-[760px] mx-auto px-4 pb-1 flex gap-1">
-          {(["dropzone", "spec", "illustration", "artwork"] as ContextMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setContextMode(mode)}
-              className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${
-                contextMode === mode
-                  ? "bg-primary/20 text-primary"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
+        {/* Center column — existing chat */}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* Zone 1 — Chat messages (scrollable) */}
+          <main className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-[760px] mx-auto py-6 px-4">
+              <div className="flex flex-col gap-6">
+                {messages.map((message, index) => (
+                  <ChatMessage
+                    key={message.id}
+                    content={message.content}
+                    isUser={message.isUser}
+                    showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
+                    messageId={message.dbId}
+                    userId={userData?.userId}
+                    conversationId={userData?.conversationId}
+                  />
+                ))}
+                
+                {showSmartShortcuts && smartShortcutType && (
+                  <SmartShortcuts 
+                    userType={smartShortcutType}
+                    onSelectShortcut={handleShortcutSelect}
+                    onSkip={handleShortcutsSkip}
+                  />
+                )}
+
+                {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
+                  <FollowUpShortcuts
+                    initialSelection={selectedShortcut}
+                    userType={smartShortcutType}
+                    onSelectShortcut={handleFollowUpSelect}
+                    onSkip={handleFollowUpSkip}
+                  />
+                )}
+                
+                {isTyping && <TypingIndicator />}
+                
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          </main>
+          
+          {/* Zone 2 — Input bar */}
+          <ChatInput ref={textareaRef} onSend={handleSend} disabled={isTyping || !userData} />
+
+          {/* Debug controls (dev only) */}
+          {isDev && (
+            <div className="max-w-[760px] mx-auto px-4 pb-1 flex gap-2 justify-center">
+              <div className="flex gap-1">
+                {(["dropzone", "spec", "illustration", "artwork"] as ContextMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setContextMode(mode)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${
+                      contextMode === mode
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 items-center">
+                <button
+                  onClick={() => setCurrentStage(s => Math.max(0, s - 1))}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted"
+                >
+                  − Stage
+                </button>
+                <span className="text-[10px] text-muted-foreground">Stage {currentStage}</span>
+                <button
+                  onClick={() => setCurrentStage(s => Math.min(10, s + 1))}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted"
+                >
+                  + Stage
+                </button>
+                <button
+                  onClick={() => setSelectionVisible(v => !v)}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted"
+                >
+                  {selectionVisible ? "Hide" : "Show"} Grid
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Zone 3 — Context panel (fixed height) */}
+          <ContextPanel mode={contextMode} droppedFile={droppedFile} onFileDrop={handleFileDrop} />
         </div>
-      )}
 
-      {/* Zone 3 — Context panel (fixed height) */}
-      <ContextPanel mode={contextMode} droppedFile={droppedFile} onFileDrop={handleFileDrop} />
+        {/* Right column — spec summary */}
+        <div className="hidden lg:flex flex-col overflow-y-auto p-2 border-l border-border/40">
+          <SpecSummary
+            specs={specs}
+            visible={messages.length > 0}
+          />
+        </div>
+      </div>
 
       {showGlossary && (
         <GlossaryPanel 
