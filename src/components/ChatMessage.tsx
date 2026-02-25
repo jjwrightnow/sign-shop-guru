@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { GlossaryHighlighter } from "./GlossaryHighlighter";
+import { useBranding } from "@/context/BrandingContext";
 
 interface ChatMessageProps {
   content: string;
@@ -70,6 +71,7 @@ const parseMessageContent = (content: string) => {
 
 const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId, conversationId }: ChatMessageProps) => {
   const { toast } = useToast();
+  const { botAvatarUrl } = useBranding();
   const [feedbackGiven, setFeedbackGiven] = useState<"helpful" | "not_helpful" | null>(null);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
@@ -111,9 +113,13 @@ const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId,
       isUser ? "justify-end" : "justify-start"
     )}>
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-primary" />
-        </div>
+        botAvatarUrl ? (
+          <img src={botAvatarUrl} alt="Bot" className="flex-shrink-0 w-8 h-8 rounded-full object-cover border border-primary/30" />
+        ) : (
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+            <Zap className="w-4 h-4 text-primary" />
+          </div>
+        )
       )}
       
       <div className={cn(
