@@ -1,4 +1,4 @@
-import { useState, useEffect, KeyboardEvent } from "react";
+import React, { useState, useEffect, KeyboardEvent, forwardRef } from "react";
 import { Send, Mic, MicOff } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
+const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({ onSend, disabled }, ref) => {
   const [message, setMessage] = useState("");
   const { companyName } = useBranding();
   const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } =
@@ -49,11 +49,21 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
   const minHeight = 84;
   const maxHeight = 184;
 
+  // Merge forwarded ref with internal needs
+  const textareaRef = React.useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      if (typeof ref === "function") ref(node);
+      else if (ref) (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+    },
+    [ref]
+  );
+
   return (
     <div className="w-full bg-background border-t border-border/40 pt-3 pb-2">
       <div className="max-w-[760px] mx-auto px-4">
         <div className="relative">
           <textarea
+            ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -128,6 +138,8 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
       </div>
     </div>
   );
-};
+});
+
+ChatInput.displayName = "ChatInput";
 
 export default ChatInput;
