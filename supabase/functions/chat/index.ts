@@ -1052,7 +1052,16 @@ MARKER RULES:
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
         system: contextualPrompt + imageContext,
-        messages: [{ role: 'user', content: trimmedQuestion }]
+        messages: [
+          ...(fullConversationHistory || [])
+            .slice(-10)
+            .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+            .map(msg => ({
+              role: msg.role as 'user' | 'assistant',
+              content: String(msg.content)
+            })),
+          { role: 'user', content: trimmedQuestion }
+        ]
       })
     })
 
