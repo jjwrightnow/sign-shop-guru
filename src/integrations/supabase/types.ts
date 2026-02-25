@@ -1594,6 +1594,7 @@ export type Database = {
           auth_id: string | null
           business_name: string | null
           company: string | null
+          company_id: string | null
           contacted: boolean | null
           created_at: string | null
           email: string
@@ -1626,6 +1627,7 @@ export type Database = {
           auth_id?: string | null
           business_name?: string | null
           company?: string | null
+          company_id?: string | null
           contacted?: boolean | null
           created_at?: string | null
           email: string
@@ -1658,6 +1660,7 @@ export type Database = {
           auth_id?: string | null
           business_name?: string | null
           company?: string | null
+          company_id?: string | null
           contacted?: boolean | null
           created_at?: string | null
           email?: string
@@ -1686,7 +1689,15 @@ export type Database = {
           tos_accepted?: boolean | null
           user_type?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
