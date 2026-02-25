@@ -1,5 +1,6 @@
 import { useState, useEffect, KeyboardEvent } from "react";
 import { Send, Mic, MicOff } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useBranding } from "@/context/BrandingContext";
@@ -83,22 +84,30 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           </div>
           
           {isSupported && (
-            <button
-              onClick={handleToggleListening}
-              disabled={disabled}
-              className={cn(
-                "flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center",
-                "transition-all duration-200",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-                "active:scale-95",
-            isListening
-              ? "bg-red-500 text-white"
-              : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
-              )}
-              title={isListening ? "Stop listening" : "Start voice input"}
-            >
-              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleToggleListening}
+                    disabled={disabled}
+                    className={cn(
+                      "flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center",
+                      "transition-all duration-200",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                      "active:scale-95",
+                      isListening
+                        ? "bg-red-500 text-white animate-pulse"
+                        : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
+                    )}
+                  >
+                    {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">Voice input — works best in Chrome.<br />Technical terms may need correction.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           
           <button
