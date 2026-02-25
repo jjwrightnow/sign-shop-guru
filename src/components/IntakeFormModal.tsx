@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useBranding } from "@/context/BrandingContext";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,6 +102,7 @@ interface ReturningUserData {
 
 const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
   const { toast } = useToast();
+  const { companyName } = useBranding();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingUser, setIsCheckingUser] = useState(true);
   const [returningUser, setReturningUser] = useState<ReturningUserData | null>(null);
@@ -483,7 +485,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
                 The old-timers who bent metal, wired transformers, and solved problems on the fly — they're retiring. And they're taking decades of knowledge with them.
               </p>
               <p className="text-primary font-semibold text-lg">
-                SignMaker.ai fixes this.
+                {companyName} fixes this.
               </p>
               <p className="text-muted-foreground">
                 We help you capture the tribal knowledge in your senior people's heads — and make it available to your entire team, forever.
@@ -506,7 +508,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
             <div className="border-t border-border pt-6 space-y-3">
               <p className="font-semibold">BONUS: Customer-Facing Mode</p>
               <p className="text-muted-foreground text-sm">
-                SignMaker.ai includes a shopper-friendly version you can embed on your website.
+                {companyName} includes a shopper-friendly version you can embed on your website.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -645,7 +647,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
               </div>
             </div>
             <DialogTitle className="text-2xl font-semibold text-foreground">
-              Welcome to SignMaker<span className="text-primary">.ai</span>
+              Welcome to {companyName}
             </DialogTitle>
           </DialogHeader>
 
@@ -874,7 +876,7 @@ const IntakeFormModal = ({ open, onComplete }: IntakeFormModalProps) => {
                 The guys who actually built signs are retiring. Their knowledge is walking out the door.
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                SignMaker.ai captures it:
+                {companyName} captures it:
               </p>
               <ul className="text-xs text-muted-foreground mt-1 space-y-1">
                 <li>✓ <strong>Tribal knowledge preserved</strong> — decades of expertise, always accessible</li>

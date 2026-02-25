@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { GraduationCap, X, ChevronRight, Sparkles } from "lucide-react";
+import { useBranding } from "@/context/BrandingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,6 +80,7 @@ const MAX_CUSTOM_INSTRUCTIONS = 500;
 
 const TrainMePanel = ({ open, onClose, userId, onTrainingComplete }: TrainMePanelProps) => {
   const { toast } = useToast();
+  const { companyName } = useBranding();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showUpsell, setShowUpsell] = useState(false);
@@ -244,7 +246,7 @@ const TrainMePanel = ({ open, onClose, userId, onTrainingComplete }: TrainMePane
                 <span className="text-lg">💡</span> Want this for your whole team?
               </h4>
               <p className="text-sm text-muted-foreground mt-2">
-                Sign companies can get a fully customized SignMaker.ai — trained on your SOPs, products, and brand voice — for your staff and website.
+                Sign companies can get a fully customized {companyName} — trained on your SOPs, products, and brand voice — for your staff and website.
               </p>
               <Button className="mt-4 w-full" variant="default">
                 Learn More
