@@ -317,86 +317,6 @@ function getOffer(patterns: { shopper: number; owner: number; installer: number 
   return null;
 }
 
-// ========== SCORING-BASED MODE DETECTION ==========
-// Known manufacturer names for auto-detection
-const MANUFACTURER_NAMES = [
-  'gemini', 'grimco', 'tsf', 'signage factory', 'federal heath', 'daktronics',
-  'watchfire', 'sloanled', 'principal led', 'bitro', 'signcomp', 'jones sign',
-  'apco', 'matthews', 'woodland', 'poblocki', 'signall', 'visotec'
-];
-
-interface ModeScores {
-  quote: number;
-  manufacturers: number;
-  specs: number;
-  learn: number;
-}
-
-// Scoring-based mode detection (replaces first-match regex)
-function detectMode(question: string): { mode: string; scores: ModeScores } {
-  const q = question.toLowerCase();
-  const scores: ModeScores = { quote: 0, manufacturers: 0, specs: 0, learn: 0 };
-  
-  // QUOTE signals (strong)
-  if (/\b(quote|pricing|price|cost|how much|estimate|order|buy|purchase)\b/.test(q)) {
-    scores.quote += 3;
-  }
-  
-  // MANUFACTURERS signals (strong)
-  if (/\b(who makes|who manufactures|manufacturer|vendor|supplier|where to buy|where can i get|source for|who sells)\b/.test(q)) {
-    scores.manufacturers += 4;
-  }
-  
-  // Check for known manufacturer names
-  if (MANUFACTURER_NAMES.some(n => q.includes(n))) {
-    scores.manufacturers += 3;
-  }
-  
-  // SPECS signals (strong)
-  if (/\b(spec|specs|specification|what size|how thick|thickness|gauge|dimensions|depth|stroke width|min(imum)?|max(imum)?)\b/.test(q)) {
-    scores.specs += 3;
-  }
-  
-  // Product terms (weak - don't let them override vendor intent)
-  if (/\b(channel letter|dimensional letter|monument sign|pylon|cabinet sign|led module|halo lit|face lit|raceway)\b/.test(q)) {
-    scores.specs += 1;
-  }
-  
-  // Determine winner
-  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  const winner = sorted[0][0];
-  const topScore = sorted[0][1];
-  
-  // If all scores are zero, default to learn
-  if (topScore === 0) return { mode: 'learn', scores };
-  
-  // Only redirect to quote if clearly dominant (score >= 3 AND beats others by 2+)
-  if (winner === 'quote' && scores.quote >= 3 && 
-      scores.quote >= scores.specs + 2 && 
-      scores.quote >= scores.manufacturers + 2) {
-    return { mode: 'quote', scores };
-  }
-  
-  // If quote won but not dominant, demote to learn (safer)
-  if (winner === 'quote') return { mode: 'learn', scores };
-  
-  return { mode: winner, scores };
-}
-
-// Keyword extraction for selective data queries
-function extractKeywords(question: string): string[] {
-  const stopWords = ['who', 'makes', 'manufacturer', 'vendor', 'supplier', 'where', 
-    'buy', 'get', 'can', 'i', 'a', 'the', 'for', 'to', 'what', 'is', 'are', 'how',
-    'do', 'does', 'about', 'tell', 'me', 'explain'];
-  
-  return question
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 2)
-    .filter(w => !stopWords.includes(w))
-    .slice(0, 6);
-}
 
 function isSpam(message: string): { isSpam: boolean; reason: string } {
   // Check for spam patterns
@@ -477,9 +397,9 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { question, mode, user_context, conversation_id } = await req.json()
+    const { question, user_context, conversation_id } = await req.json()
 
-    console.log('Received chat request:', { question: question?.substring(0, 50), mode, conversation_id })
+    console.log('Received chat request:', { question: question?.substring(0, 50), conversation_id })
 
     // Input validation - must be a string
     if (!question || typeof question !== 'string') {
@@ -814,108 +734,6 @@ serve(async (req) => {
     const isShopperUser = isShopperByIntent || isShopperByExperience;
     const messageCount = conversationMessages.length;
 
-    // ========== MODE DETECTION & CONTEXT ==========
-    let modeContext = '';
-    let detectedModeResult = { mode: 'learn', scores: { quote: 0, manufacturers: 0, specs: 0, learn: 0 } };
-    
-    // If no mode provided or mode is 'learn', attempt auto-detection
-    let chatMode = mode || 'learn';
-    if (!mode || mode === 'learn') {
-      detectedModeResult = detectMode(trimmedQuestion);
-      // Only auto-switch if detection is confident (top score >= 3)
-      const topScore = Math.max(...Object.values(detectedModeResult.scores));
-      if (topScore >= 3) {
-        chatMode = detectedModeResult.mode;
-        console.log('Auto-detected mode:', chatMode, 'scores:', detectedModeResult.scores);
-      }
-    }
-    
-    // Extract keywords for selective queries
-    const keywords = extractKeywords(trimmedQuestion);
-    console.log('Extracted keywords:', keywords);
-    
-    switch (chatMode) {
-      case 'specs':
-        // Only fetch relevant profiles based on keywords, not entire table
-        const { data: specsData } = await supabase
-          .from('products_full')
-          .select('name, manufacturer_name, materials, depth_options, height_min, height_max, led_options, finishes, category, profile_name')
-          .eq('is_active', true)
-          .limit(20);
-        
-        if (specsData && specsData.length > 0) {
-          modeContext = `\n\nMODE: PRODUCT SPECIFICATIONS
-You have access to detailed product specs. Reference this data when answering:
-
-AVAILABLE PRODUCTS:
-${specsData.map((p: any) => 
-  `- ${p.name} (${p.manufacturer_name || 'Unknown'}): ${p.category || 'General'}, Profile: ${p.profile_name || 'N/A'}, Heights: ${p.height_min || '?'}-${p.height_max || '?'}", Materials: ${(p.materials || []).join(', ') || 'N/A'}`
-).slice(0, 15).join('\n')}
-
-Be specific about dimensions, materials, and options when answering.`;
-        }
-        break;
-        
-      case 'suppliers':
-      case 'manufacturers':
-        // Build keyword-based search for manufacturers
-        let manufacturerQuery = supabase
-          .from('manufacturers')
-          .select('name, entity_name, headquarters_location, products_manufactured, region, category, notes, website')
-          .eq('status', 'Active');
-        
-        // If we have keywords, try to filter by products_manufactured
-        if (keywords.length > 0) {
-          const searchTerms = keywords.map(k => `products_manufactured.ilike.%${k}%`).join(',');
-          manufacturerQuery = manufacturerQuery.or(searchTerms);
-        }
-        
-        const { data: manufacturers } = await manufacturerQuery.limit(15);
-        
-        if (manufacturers && manufacturers.length > 0) {
-          modeContext = `\n\nMODE: SUPPLIERS & MANUFACTURERS
-Provide neutral, factual information about manufacturers. DO NOT rank or recommend specific brands.
-
-RELEVANT MANUFACTURERS:
-${manufacturers.map((m: any) => 
-  `- ${m.entity_name || m.name} (${m.region || 'Unknown Region'}): ${m.products_manufactured || m.notes || 'No description available'}`
-).join('\n')}
-
-Remember: Stay neutral. Acknowledge they exist, describe their focus, but never say "X is the best" or compare quality.`;
-        } else {
-          // Fallback to all active manufacturers
-          const { data: allMfrs } = await supabase
-            .from('manufacturers')
-            .select('name, entity_name, region, products_manufactured, notes')
-            .eq('status', 'Active')
-            .limit(10);
-          
-          if (allMfrs && allMfrs.length > 0) {
-            modeContext = `\n\nMODE: SUPPLIERS & MANUFACTURERS
-Provide neutral, factual information about manufacturers. DO NOT rank or recommend specific brands.
-
-KNOWN MANUFACTURERS:
-${allMfrs.map((m: any) => 
-  `- ${m.entity_name || m.name}: ${m.products_manufactured || m.notes || 'No description available'}`
-).join('\n')}
-
-Remember: Stay neutral. Acknowledge they exist, describe their focus, but never say "X is the best" or compare quality.`;
-          }
-        }
-        break;
-        
-      case 'quote':
-        // Quote mode - don't fetch data, will show redirect card on frontend
-        modeContext = `\n\nMODE: QUOTE REQUEST
-The user is asking about pricing/quotes. Briefly acknowledge their interest and let them know they can get a custom quote at FastLetter.bot. Don't try to provide specific pricing - redirect them to the quote tool.`;
-        break;
-        
-      case 'learn':
-      default:
-        modeContext = `\n\nMODE: EDUCATION
-Focus on teaching concepts clearly. No product lookups needed - use your knowledge to explain signs, materials, processes, and industry concepts.`;
-        break;
-    }
 
     // REACTIVE ONLY - Only help with referrals/B2B when user explicitly asks
     const referralGuidance = referralPending ? `
@@ -987,7 +805,6 @@ Name: ${user_context?.name || 'Unknown'}
 Experience: ${user_context?.experience_level || 'Unknown'}
 Intent: ${user_context?.intent || 'Unknown'}
 Messages: ${messageCount}
-${modeContext}
 ${customContextSection}
 ${referralGuidance}
 ${b2bGuidance}

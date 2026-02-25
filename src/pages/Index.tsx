@@ -9,10 +9,6 @@ import OptInPrompt from "@/components/OptInPrompt";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
-import ModeSelector, { ChatMode } from "@/components/ModeSelector";
-import ModeBar from "@/components/ModeBar";
-import ModeBadge from "@/components/ModeBadge";
-import QuoteRedirectCard from "@/components/QuoteRedirectCard";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,7 +19,6 @@ interface Message {
   content: string;
   isUser: boolean;
   dbId?: string;
-  mode?: ChatMode; // Track which mode produced this response
 }
 
 interface UserData {
@@ -61,15 +56,6 @@ const IndexContent = () => {
   const [followUpSkipped, setFollowUpSkipped] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
   const [showFullGlossary, setShowFullGlossary] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<ChatMode | null>(() => {
-    const savedMode = localStorage.getItem("signmaker_preferred_mode");
-    return savedMode as ChatMode | null;
-  });
-  // Manual mode lock - tracks user-selected mode and remaining locked turns
-  const [manualMode, setManualMode] = useState<ChatMode | null>(null);
-  const [manualModeTurns, setManualModeTurns] = useState(0);
-  // Show quote redirect card when quote mode detected
-  const [showQuoteCard, setShowQuoteCard] = useState(false);
   
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -88,7 +74,6 @@ const IndexContent = () => {
       const storedEmail = localStorage.getItem("signmaker_user_email");
       if (storedEmail) {
         try {
-          // Use edge function to check user - no direct table access
           const { data: userData, error: userError } = await supabase.functions.invoke("get-user-by-email", {
             body: { email: storedEmail },
           });
@@ -100,13 +85,11 @@ const IndexContent = () => {
 
           const user = userData.user;
           
-          // Check if user previously dismissed opt-in
           const optInDismissedStored = localStorage.getItem("signmaker_optin_dismissed");
           if (optInDismissedStored === "true") {
             setOptInDismissed(true);
           }
 
-          // Get latest conversation via edge function
           const { data: convoData } = await supabase.functions.invoke("get-conversations", {
             body: { user_id: user.id },
           });
@@ -123,11 +106,8 @@ const IndexContent = () => {
               email: storedEmail,
             });
             
-            // Load messages for this conversation
             await loadConversationMessages(latestConvo.id, user.name);
             await loadUserConversations(user.id);
-            
-            // Check if user has training context
             await checkUserTrainingStatus(user.id);
           }
         } catch (error) {
@@ -139,7 +119,6 @@ const IndexContent = () => {
     checkReturningUser();
   }, []);
 
-  // Check if user has saved training context
   const checkUserTrainingStatus = async (userId: string) => {
     try {
       const { data } = await supabase.functions.invoke("user-context", {
@@ -153,7 +132,6 @@ const IndexContent = () => {
     }
   };
 
-  // Show opt-in prompt after 5+ messages (only once, not after dismissal)
   useEffect(() => {
     const userMessages = messages.filter(m => m.isUser).length;
     if (userMessages >= 5 && !optInDismissed) {
@@ -164,7 +142,6 @@ const IndexContent = () => {
   const loadUserConversations = async (userId: string) => {
     setIsLoadingConversations(true);
     try {
-      // Use edge function to get conversations securely
       const { data, error } = await supabase.functions.invoke("get-conversations", {
         body: { user_id: userId },
       });
@@ -173,7 +150,6 @@ const IndexContent = () => {
 
       const convos = data?.conversations || [];
 
-      // Get first message for each conversation via edge function
       const conversationsWithPreview = await Promise.all(
         convos.map(async (conv: { id: string; created_at: string }) => {
           try {
@@ -206,7 +182,6 @@ const IndexContent = () => {
     }
   };
 
-  // Generate tailored welcome message based on user type
   const getWelcomeMessage = (name: string, experienceLevel: string, intent: string): string => {
     if (experienceLevel === 'shopper' || intent === 'shopping') {
       return `Hey ${name} — I'll help you understand your sign options. What kind of sign are you thinking about?`;
@@ -241,12 +216,10 @@ const IndexContent = () => {
         }));
         setMessages(loadedMessages);
         setMessageCount(dbMessages.filter((m: any) => m.role === "user").length);
-        // Don't show shortcuts if conversation has messages
         setShortcutsSkipped(true);
         setSelectedShortcut(null);
         setFollowUpSkipped(true);
       } else {
-        // No messages, show welcome
         const welcomeMessage = getWelcomeMessage(
           userName, 
           userData?.experienceLevel || '', 
@@ -254,7 +227,6 @@ const IndexContent = () => {
         );
         setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
         setMessageCount(0);
-        // Reset shortcuts for fresh conversation
         setShortcutsSkipped(false);
         setSelectedShortcut(null);
         setFollowUpSkipped(false);
@@ -265,7 +237,6 @@ const IndexContent = () => {
   };
 
   const handleIntakeComplete = async (data: UserData) => {
-    // Store email for returning user check - use email directly from form data
     const storedEmail = localStorage.getItem("signmaker_user_email");
     if (!storedEmail && data.email) {
       localStorage.setItem("signmaker_user_email", data.email);
@@ -273,18 +244,13 @@ const IndexContent = () => {
 
     setUserData(data);
     
-    // Set personalized welcome message
     const welcomeMessage = getWelcomeMessage(data.name, data.experienceLevel, data.intent);
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
     setMessageCount(0);
     setShortcutsSkipped(false);
     setSelectedShortcut(null);
     setFollowUpSkipped(false);
-    setSelectedMode(null); // Reset mode for new session
-    setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
-    setMessageCount(0);
 
-    // Load conversations for sidebar
     await loadUserConversations(data.userId);
   };
 
@@ -311,7 +277,6 @@ const IndexContent = () => {
 
       setUserData({ ...userData, conversationId: newConvo.id });
       
-      // Set personalized welcome message
       const welcomeMessage = getWelcomeMessage(userData.name, userData.experienceLevel, userData.intent);
       setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
       setMessageCount(0);
@@ -320,9 +285,7 @@ const IndexContent = () => {
       setShortcutsSkipped(false);
       setSelectedShortcut(null);
       setFollowUpSkipped(false);
-      setSelectedMode(null); // Reset mode for new chat
 
-      // Refresh conversations list
       await loadUserConversations(userData.userId);
     } catch (error: any) {
       console.error("Error creating new chat:", error);
@@ -337,26 +300,6 @@ const IndexContent = () => {
   const handleSend = async (content: string) => {
     if (!userData) return;
 
-    // Quote mode: show redirect card instead of sending
-    if (selectedMode === 'quote') {
-      setShowQuoteCard(true);
-      return;
-    }
-    
-    // Determine effective mode (manual lock overrides)
-    let effectiveMode: ChatMode = selectedMode || 'learn';
-    if (manualMode && manualModeTurns > 0) {
-      effectiveMode = manualMode;
-      setManualModeTurns(prev => prev - 1);
-      // Clear manual mode if expired
-      if (manualModeTurns <= 1) {
-        setManualMode(null);
-      }
-    }
-    
-    // Hide quote card when sending a regular message
-    setShowQuoteCard(false);
-
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       content,
@@ -370,7 +313,6 @@ const IndexContent = () => {
       const { data, error } = await supabase.functions.invoke("chat", {
         body: {
           question: content,
-          mode: effectiveMode, // Pass effective mode (respecting manual lock)
           user_context: {
             name: userData.name,
             experience_level: userData.experienceLevel,
@@ -382,7 +324,6 @@ const IndexContent = () => {
 
       if (error) throw error;
 
-      // Get the latest message ID from the database for feedback via edge function
       let dbMessageId: string | undefined;
       try {
         const { data: msgData } = await supabase.functions.invoke("get-messages", {
@@ -401,21 +342,17 @@ const IndexContent = () => {
         content: data.response,
         isUser: false,
         dbId: dbMessageId,
-        mode: effectiveMode, // Track which mode produced this response
       };
       setMessages((prev) => [...prev, assistantMessage]);
       setMessageCount((prev) => prev + 1);
 
-      // Refresh conversations to update first_message if this is first message
       await loadUserConversations(userData.userId);
     } catch (error: any) {
       console.error("Chat error:", error);
       
-      // Parse error message for user-friendly display
       let errorMessage = "Failed to get response. Please try again.";
       
       try {
-        // Check if the error message contains JSON (e.g., from edge function)
         const errorBody = error.message?.includes('{') 
           ? JSON.parse(error.message.substring(error.message.indexOf('{')))
           : null;
@@ -426,7 +363,6 @@ const IndexContent = () => {
           errorMessage = errorBody.error;
         }
       } catch {
-        // If parsing fails, check for common error patterns
         if (error.message?.includes('429') || error.message?.toLowerCase().includes('wait')) {
           errorMessage = "Please wait a moment before sending another message.";
         } else if (error.message) {
@@ -440,7 +376,6 @@ const IndexContent = () => {
         variant: "destructive",
       });
       
-      // Remove the pending user message on error
       setMessages((prev) => prev.filter((msg) => msg.id !== userMessage.id));
     } finally {
       setIsTyping(false);
@@ -452,7 +387,6 @@ const IndexContent = () => {
     setOptInDismissed(true);
     localStorage.setItem("signmaker_optin_dismissed", "true");
   };
-
 
   const handleTrainMeClick = () => {
     setShowTrainMe(true);
@@ -520,150 +454,39 @@ const IndexContent = () => {
     }
   };
 
-  // Check if user is a sign professional (not a shopper or freelancer)
   const isSignProfessional = userData && 
     userData.experienceLevel !== 'shopper' && 
     userData.experienceLevel !== 'freelancer' &&
     userData.intent !== 'shopping' &&
     userData.intent !== 'leads';
 
-  // Determine smart shortcut type based on user profile
   const getSmartShortcutType = (): "shopper" | "professional-active" | "professional-training" | "freelancer" | null => {
     if (!userData) return null;
     
-    // Shopper
     if (userData.experienceLevel === 'shopper' || userData.intent === 'shopping') {
       return "shopper";
     }
-    
-    // Freelancer
     if (userData.experienceLevel === 'freelancer' || userData.intent === 'leads') {
       return "freelancer";
     }
-    
-    // Professional - Active project
     if (userData.intent === 'active') {
       return "professional-active";
     }
-    
-    // Professional - Training
     if (userData.intent === 'training') {
       return "professional-training";
     }
-    
-    // Learning or other - no shortcuts, go straight to chat
     return null;
   };
 
   const smartShortcutType = getSmartShortcutType();
   const isFreshConversation = messages.length === 1 && !messages[0]?.isUser;
-  const showSmartShortcuts = smartShortcutType && isFreshConversation && !isTyping && !shortcutsSkipped && selectedMode;
-  
-  // Show mode selector on fresh conversation before mode is selected
-  const showModeSelector = isFreshConversation && !isTyping && !selectedMode;
-
-  // Handle mode selection
-  const handleModeSelect = async (mode: ChatMode) => {
-    if (mode === 'quote') {
-      // Track quote selection before redirect
-      if (userData) {
-        try {
-          await supabase.from("mode_selections").insert({
-            user_id: userData.userId,
-            conversation_id: userData.conversationId,
-            mode: 'quote',
-            previous_mode: selectedMode,
-          });
-        } catch (error) {
-          console.error("Error tracking mode selection:", error);
-        }
-      }
-      // Quote mode: redirect directly to FastLetter.bot
-      window.open('https://fastletter.bot', '_blank');
-      return;
-    }
-    
-    const previousMode = selectedMode;
-    setSelectedMode(mode);
-    
-    // Set manual mode lock for 2 turns when user explicitly selects
-    setManualMode(mode);
-    setManualModeTurns(2);
-    
-    // Hide quote card when switching modes
-    setShowQuoteCard(false);
-    
-    // Persist mode preference in localStorage
-    localStorage.setItem("signmaker_preferred_mode", mode);
-    
-    // Track mode selection analytics
-    if (userData) {
-      try {
-        await supabase.from("mode_selections").insert({
-          user_id: userData.userId,
-          conversation_id: userData.conversationId,
-          mode,
-          previous_mode: previousMode,
-        });
-      } catch (error) {
-        console.error("Error tracking mode selection:", error);
-      }
-    }
-    
-    // Mode labels for display
-    const modeLabels: Record<ChatMode, string> = {
-      learn: "Learn",
-      specs: "Specs",
-      quote: "Quote",
-      suppliers: "Suppliers",
-    };
-    
-    // Show toast notification on mode change
-    if (previousMode !== null && previousMode !== mode) {
-      toast({
-        description: `Switched to ${modeLabels[mode]} mode`,
-        duration: 2000,
-      });
-    } else if (previousMode === null) {
-      toast({
-        description: `${modeLabels[mode]} mode activated`,
-        duration: 2000,
-      });
-    }
-    
-    // Only show mode message on initial selection or mode switch
-    if (previousMode !== mode) {
-      const modeMessages: Record<ChatMode, string> = {
-        learn: "Great! I'm here to help you learn about signs, materials, and processes. What would you like to know?",
-        specs: "I'll pull detailed specs for you. What product are you looking at?",
-        quote: "", // Won't be shown
-        suppliers: "I can help you explore manufacturers and suppliers. What are you looking for?",
-      };
-      
-      // Only add message if switching modes (not first selection on fresh convo with welcome)
-      if (previousMode !== null) {
-        setMessages(prev => [...prev, { 
-          id: `mode-${Date.now()}`, 
-          content: `Switched to ${mode} mode. ${modeMessages[mode]}`, 
-          isUser: false 
-        }]);
-      } else {
-        setMessages(prev => [...prev, { 
-          id: `mode-${Date.now()}`, 
-          content: modeMessages[mode], 
-          isUser: false 
-        }]);
-      }
-    }
-  };
+  const showSmartShortcuts = smartShortcutType && isFreshConversation && !isTyping && !shortcutsSkipped;
 
   const handleShortcutSelect = async (shortcut: { value: string; prompt: string }) => {
     if (!userData) return;
     
-    // Store the selected shortcut for follow-up shortcuts
     setSelectedShortcut(shortcut.value);
     
-    // Track the shortcut selection
     try {
       await supabase
         .from("conversations")
@@ -673,7 +496,6 @@ const IndexContent = () => {
       console.error("Error tracking shortcut:", error);
     }
     
-    // Send the prompt
     handleSend(shortcut.prompt);
   };
 
@@ -690,7 +512,6 @@ const IndexContent = () => {
     setFollowUpSkipped(true);
   };
 
-  // Show follow-up shortcuts after first response (when we have 3 messages: welcome, user, assistant)
   const showFollowUpShortcuts = selectedShortcut && 
     smartShortcutType && 
     messages.length === 3 && 
@@ -698,21 +519,18 @@ const IndexContent = () => {
     !isTyping && 
     !followUpSkipped;
 
-  // Handle opening glossary panel
   const handleGlossaryClick = () => {
     setShowFullGlossary(true);
     setShowGlossary(true);
     setSelectedTerm(null);
   };
 
-  // Close glossary panel
   const handleGlossaryClose = () => {
     setShowGlossary(false);
     setShowFullGlossary(false);
     setSelectedTerm(null);
   };
 
-  // Open panel when term is selected from chat
   useEffect(() => {
     if (selectedTerm) {
       setShowGlossary(true);
@@ -736,7 +554,6 @@ const IndexContent = () => {
             onOptInDismiss={handleOptInDismiss}
           />
           
-          {/* Train Me Panel - only for sign professionals */}
           {isSignProfessional && (
             <TrainMePanel
               open={showTrainMe}
@@ -764,33 +581,17 @@ const IndexContent = () => {
           <div className="container max-w-4xl mx-auto py-6 px-4">
             <div className="flex flex-col gap-4">
               {messages.map((message, index) => (
-                <div key={message.id} className="flex flex-col gap-1">
-                  {/* Mode badge above AI responses */}
-                  {!message.isUser && message.mode && (
-                    <div className="ml-0">
-                      <ModeBadge mode={message.mode} />
-                    </div>
-                  )}
-                  <ChatMessage
-                    content={message.content}
-                    isUser={message.isUser}
-                    showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
-                    messageId={message.dbId}
-                    userId={userData?.userId}
-                    conversationId={userData?.conversationId}
-                  />
-                </div>
+                <ChatMessage
+                  key={message.id}
+                  content={message.content}
+                  isUser={message.isUser}
+                  showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
+                  messageId={message.dbId}
+                  userId={userData?.userId}
+                  conversationId={userData?.conversationId}
+                />
               ))}
               
-              {/* Quote redirect card */}
-              {showQuoteCard && (
-                <QuoteRedirectCard 
-                  onEscapeToSpecs={() => { setSelectedMode('specs'); setShowQuoteCard(false); }}
-                  onEscapeToLearn={() => { setSelectedMode('learn'); setShowQuoteCard(false); }}
-                />
-              )}
-              
-              {/* Smart shortcuts for all user types on fresh conversation after mode is selected */}
               {showSmartShortcuts && smartShortcutType && (
                 <SmartShortcuts 
                   userType={smartShortcutType}
@@ -799,7 +600,6 @@ const IndexContent = () => {
                 />
               )}
 
-              {/* Follow-up shortcuts after first response */}
               {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
                 <FollowUpShortcuts
                   initialSelection={selectedShortcut}
@@ -811,21 +611,14 @@ const IndexContent = () => {
               
               {isTyping && <TypingIndicator />}
               
-              
               <div ref={messagesEndRef} />
             </div>
           </div>
         </main>
         
-        {/* Mode bar above input */}
-        {userData && (
-          <ModeBar activeMode={selectedMode} onSelectMode={handleModeSelect} />
-        )}
-        
         <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
       </div>
 
-      {/* Glossary Panel */}
       {showGlossary && (
         <GlossaryPanel 
           onClose={handleGlossaryClose}
@@ -836,7 +629,6 @@ const IndexContent = () => {
   );
 };
 
-// Wrapper component with GlossaryProvider
 const Index = () => {
   return (
     <GlossaryProvider>
