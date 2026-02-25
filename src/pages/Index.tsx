@@ -8,6 +8,7 @@ import SlideOutMenu from "@/components/SlideOutMenu";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
+import ContextPanel, { type ContextMode } from "@/components/ContextPanel";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,6 +54,8 @@ const IndexContent = () => {
   const [showGlossary, setShowGlossary] = useState(false);
   const [showFullGlossary, setShowFullGlossary] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [contextMode, setContextMode] = useState<ContextMode>("dropzone");
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
   
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -481,6 +484,13 @@ const IndexContent = () => {
     }
   }, [selectedTerm]);
 
+  const isDev = import.meta.env.DEV;
+
+  const handleFileDrop = (file: File | null) => {
+    setDroppedFile(file);
+    if (file) setContextMode("artwork");
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
@@ -512,9 +522,11 @@ const IndexContent = () => {
         </>
       )}
 
+      {/* Header */}
       <ChatHeader onMenuClick={userData ? () => setMenuOpen(true) : undefined} />
       
-      <main className="flex-1 overflow-y-auto">
+      {/* Zone 1 — Chat messages (scrollable) */}
+      <main className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-[760px] mx-auto py-6 px-4">
           <div className="flex flex-col gap-6">
             {messages.map((message, index) => (
@@ -553,7 +565,30 @@ const IndexContent = () => {
         </div>
       </main>
       
+      {/* Zone 2 — Input bar */}
       <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
+
+      {/* Debug mode switcher (dev only) */}
+      {isDev && (
+        <div className="max-w-[760px] mx-auto px-4 pb-1 flex gap-1">
+          {(["dropzone", "spec", "illustration", "artwork"] as ContextMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setContextMode(mode)}
+              className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${
+                contextMode === mode
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Zone 3 — Context panel (fixed height) */}
+      <ContextPanel mode={contextMode} droppedFile={droppedFile} onFileDrop={handleFileDrop} />
 
       {showGlossary && (
         <GlossaryPanel 
