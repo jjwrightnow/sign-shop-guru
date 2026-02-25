@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useBranding } from "@/context/BrandingContext";
 
 const Terms = () => {
+  const { companyName, supportEmail } = useBranding();
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="container max-w-3xl mx-auto py-12 px-4">
@@ -21,7 +24,7 @@ const Terms = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground mb-3">1. Acceptance of Terms</h2>
             <p className="text-muted-foreground leading-relaxed">
-              By accessing and using SignMaker.ai, you accept and agree to be bound by the terms
+              By accessing and using {companyName}, you accept and agree to be bound by the terms
               and provision of this agreement. If you do not agree to abide by the above, please
               do not use this service.
             </p>
@@ -30,7 +33,7 @@ const Terms = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground mb-3">2. Use of Service</h2>
             <p className="text-muted-foreground leading-relaxed">
-              SignMaker.ai provides general guidance and information about the sign industry.
+              {companyName} provides general guidance and information about the sign industry.
               The information provided is for educational purposes only and should not be
               considered professional advice. Always consult with qualified professionals and
               verify information with local authorities before making business decisions.
@@ -49,7 +52,7 @@ const Terms = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground mb-3">4. Code Compliance</h2>
             <p className="text-muted-foreground leading-relaxed">
-              SignMaker.ai cannot verify code compliance for electrical, structural, or zoning
+              {companyName} cannot verify code compliance for electrical, structural, or zoning
               requirements. All code-related decisions must be verified by licensed professionals
               and approved by your local Authority Having Jurisdiction (AHJ).
             </p>
@@ -67,7 +70,7 @@ const Terms = () => {
           <section>
             <h2 className="text-xl font-semibold text-foreground mb-3">6. Communication Policy</h2>
             <p className="text-muted-foreground leading-relaxed">
-              <strong className="text-foreground">Email-Only Communication:</strong> SignMaker.ai 
+              <strong className="text-foreground">Email-Only Communication:</strong> {companyName}{" "}
               communicates exclusively via email. We will never ask for your phone number, and we 
               will never call you. All communications are conducted in writing to prevent 
               misunderstandings and to ensure clear context with documented history and 
@@ -75,8 +78,8 @@ const Terms = () => {
             </p>
             <p className="text-muted-foreground leading-relaxed mt-3">
               For all inquiries, please contact us at{" "}
-              <a href="mailto:ask@signmaker.ai" className="text-primary hover:underline">
-                ask@signmaker.ai
+              <a href={`mailto:${supportEmail}`} className="text-primary hover:underline">
+                {supportEmail}
               </a>
             </p>
           </section>
@@ -93,8 +96,8 @@ const Terms = () => {
             <h2 className="text-xl font-semibold text-foreground mb-3">8. Contact</h2>
             <p className="text-muted-foreground leading-relaxed">
               For questions about these terms, please email us at{" "}
-              <a href="mailto:ask@signmaker.ai" className="text-primary hover:underline">
-                ask@signmaker.ai
+              <a href={`mailto:${supportEmail}`} className="text-primary hover:underline">
+                {supportEmail}
               </a>
             </p>
           </section>
