@@ -8,7 +8,7 @@ import SlideOutMenu from "@/components/SlideOutMenu";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
-import ContextPanel, { type ContextMode } from "@/components/ContextPanel";
+import ContextPanel, { type ContextMode, type PdfPage, type SignAssignments, PROFILE_NAME_TO_SKU } from "@/components/ContextPanel";
 import SelectionGrid from "@/components/SelectionGrid";
 import SpecSummary from "@/components/SpecSummary";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
@@ -61,6 +61,12 @@ const IndexContent = () => {
   const [currentStage, setCurrentStage] = useState(0);
   const [specs, setSpecs] = useState<Record<string, string>>({});
   const [selectionVisible, setSelectionVisible] = useState(true);
+  const [pdfPages, setPdfPages] = useState<PdfPage[]>([]);
+  const [activePdfPage, setActivePdfPage] = useState(1);
+  const [signAssignments, setSignAssignments] = useState<SignAssignments>({});
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [pdfSubmitting, setPdfSubmitting] = useState(false);
+  const [pdfSubmitted, setPdfSubmitted] = useState(false);
   
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -492,9 +498,110 @@ const IndexContent = () => {
 
   const isDev = import.meta.env.DEV;
 
+  const handlePdfUpload = async (file: File) => {
+    const { pdfjsLib } = await import('@/lib/pdfConfig');
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    const pages: PdfPage[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({
+        canvasContext: canvas.getContext('2d')!,
+        viewport,
+      }).promise;
+      pages.push({ pageNum: i, dataUrl: canvas.toDataURL(), signName: `Sign ${i}` });
+    }
+
+    setPdfPages(pages);
+    setUploadedFileName(file.name);
+    setActivePdfPage(1);
+    setContextMode('pdf');
+
+    const assignments: SignAssignments = {};
+    pages.forEach(p => {
+      assignments[p.pageNum] = { signName: `Sign ${p.pageNum}`, profileSku: null, mergedInto: null };
+    });
+    setSignAssignments(assignments);
+
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      content: `Got it — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} loaded from "${file.name}". Each page is a separate sign by default. Browse the pages below, name each sign, and assign a lighting profile. Unassigned pages go to the factory for recommendation.`,
+      isUser: false,
+    }]);
+  };
+
   const handleFileDrop = (file: File | null) => {
+    if (file && (file.type === 'application/pdf' || file.name.endsWith('.pdf'))) {
+      handlePdfUpload(file);
+      return;
+    }
     setDroppedFile(file);
     if (file) setContextMode("artwork");
+  };
+
+  const handleSubmitSigns = async () => {
+    setPdfSubmitting(true);
+    const mergedPageNums = new Set(
+      Object.entries(signAssignments)
+        .filter(([, a]) => a.mergedInto !== null)
+        .map(([p]) => parseInt(p))
+    );
+
+    const records = Object.entries(signAssignments)
+      .filter(([pageNum]) => !mergedPageNums.has(parseInt(pageNum)))
+      .map(([pageNum, a]) => {
+        const num = parseInt(pageNum);
+        const mergedPages = Object.entries(signAssignments)
+          .filter(([, ass]) => ass.mergedInto === num)
+          .map(([p]) => parseInt(p));
+        const allPages = [num, ...mergedPages].sort((x, y) => x - y);
+        const profileName = a.profileSku
+          ? Object.entries(PROFILE_NAME_TO_SKU).find(([, sku]) => sku === a.profileSku)?.[0] ?? null
+          : null;
+        return {
+          sign_name: a.signName,
+          profile_name: profileName,
+          profile_sku: a.profileSku,
+          artwork_pages: allPages.join(', '),
+          artwork_file: uploadedFileName,
+          status: a.profileSku ? 'Submitted' : 'Needs Profile Review',
+        };
+      });
+
+    try {
+      await fetch('https://americanveteranowned.app.n8n.cloud/webhook/quote-submission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'signmaker-configurator',
+          project_name: uploadedFileName,
+          submitted_at: new Date().toISOString(),
+          signs: records,
+        }),
+      });
+      setPdfSubmitted(true);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: `Submitted. ${records.length} signs sent for factory review. ${records.filter(r => r.profile_sku).length} have profiles assigned — ${records.filter(r => !r.profile_sku).length} will be recommended by the factory. You'll receive an email when proofs are ready.`,
+        isUser: false,
+      }]);
+    } finally {
+      setPdfSubmitting(false);
+    }
+  };
+
+  const handleResetPdf = () => {
+    setPdfPages([]);
+    setActivePdfPage(1);
+    setSignAssignments({});
+    setUploadedFileName('');
+    setPdfSubmitted(false);
+    setContextMode('dropzone');
   };
 
   const handleSelectionGridSelect = (value: string) => {
@@ -605,7 +712,7 @@ const IndexContent = () => {
           {isDev && (
             <div className="max-w-[760px] mx-auto px-4 pb-1 flex gap-2 justify-center">
               <div className="flex gap-1">
-                {(["dropzone", "spec", "illustration", "artwork"] as ContextMode[]).map((mode) => (
+                {(["dropzone", "spec", "illustration", "artwork", "pdf"] as ContextMode[]).map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setContextMode(mode)}
@@ -644,7 +751,26 @@ const IndexContent = () => {
           )}
 
           {/* Zone 3 — Context panel (fixed height) */}
-          <ContextPanel mode={contextMode} droppedFile={droppedFile} onFileDrop={handleFileDrop} />
+          <ContextPanel
+            mode={contextMode}
+            droppedFile={droppedFile}
+            onFileDrop={handleFileDrop}
+            pdfPages={pdfPages}
+            activePdfPage={activePdfPage}
+            onPdfPageChange={setActivePdfPage}
+            assignments={signAssignments}
+            onAssign={(pageNum, field, value) => {
+              setSignAssignments(prev => ({
+                ...prev,
+                [pageNum]: { ...prev[pageNum], [field]: value }
+              }));
+            }}
+            onSubmitSigns={handleSubmitSigns}
+            submitting={pdfSubmitting}
+            submitted={pdfSubmitted}
+            uploadedFileName={uploadedFileName}
+            onResetPdf={handleResetPdf}
+          />
         </div>
 
         {/* Right column — spec summary */}
