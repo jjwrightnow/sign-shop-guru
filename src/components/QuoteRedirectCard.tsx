@@ -1,4 +1,5 @@
 import { FileText, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChatMode } from "@/components/ModeSelector";
@@ -9,8 +10,9 @@ interface QuoteRedirectCardProps {
 }
 
 const QuoteRedirectCard = ({ onEscapeToSpecs, onEscapeToLearn }: QuoteRedirectCardProps) => {
+  const navigate = useNavigate();
   const handleStartQuote = () => {
-    window.open('https://fastletter.bot', '_blank');
+    navigate("/quote");
   };
 
   return (
