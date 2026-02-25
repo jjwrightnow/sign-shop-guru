@@ -2,6 +2,7 @@ import { useState, useEffect, KeyboardEvent } from "react";
 import { Send, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useBranding } from "@/context/BrandingContext";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -10,10 +11,10 @@ interface ChatInputProps {
 
 const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
   const [message, setMessage] = useState("");
+  const { companyName } = useBranding();
   const { isListening, transcript, startListening, stopListening, resetTranscript, isSupported } =
     useSpeechRecognition();
 
-  // Update message when transcript changes from voice input
   useEffect(() => {
     if (transcript) {
       setMessage(transcript);
@@ -44,6 +45,10 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
     }
   };
 
+  // Line height ~20px, 3 rows min = 60px + 24px padding = 84px, 8 rows max = 160px + 24px = 184px
+  const minHeight = 84;
+  const maxHeight = 184;
+
   return (
     <div className="sticky bottom-0 w-full border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4">
       <div className="container max-w-4xl mx-auto">
@@ -55,29 +60,28 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
               onKeyDown={handleKeyDown}
               placeholder={isListening ? "Listening..." : "Ask your sign industry question..."}
               disabled={disabled}
-              rows={1}
+              rows={3}
               className={cn(
                 "w-full resize-none rounded-xl bg-muted border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground",
                 "focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50",
                 "transition-all duration-200",
                 "focus:neon-glow",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
-                "min-h-[48px] max-h-[200px]",
                 isListening && "border-red-500/50 ring-1 ring-red-500/30"
               )}
               style={{
                 height: "auto",
-                minHeight: "48px",
+                minHeight: `${minHeight}px`,
+                maxHeight: `${maxHeight}px`,
               }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 target.style.height = "auto";
-                target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+                target.style.height = `${Math.min(target.scrollHeight, maxHeight)}px`;
               }}
             />
           </div>
           
-          {/* Voice input button */}
           {isSupported && (
             <button
               onClick={handleToggleListening}
@@ -112,7 +116,7 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           </button>
         </div>
         <p className="text-[11px] text-muted-foreground text-center mt-2">
-          SignMaker.ai provides general guidance — always verify codes with local authorities.
+          {companyName} provides general guidance — always verify codes with local authorities.
         </p>
       </div>
     </div>

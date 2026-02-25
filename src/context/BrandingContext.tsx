@@ -7,6 +7,7 @@ interface BrandingData {
   primaryColor: string | null;
   secondaryColor: string | null;
   botAvatarUrl: string | null;
+  supportEmail: string;
   isLoaded: boolean;
 }
 
@@ -16,6 +17,7 @@ const defaultBranding: BrandingData = {
   primaryColor: null,
   secondaryColor: null,
   botAvatarUrl: null,
+  supportEmail: "ask@signmaker.ai",
   isLoaded: false,
 };
 
@@ -68,6 +70,7 @@ export const BrandingProvider = ({ children }: { children: ReactNode }) => {
       primaryColor: company.primary_color || null,
       secondaryColor: company.secondary_color || null,
       botAvatarUrl: company.bot_avatar_url || null,
+      supportEmail: company.support_email || defaultBranding.supportEmail,
       isLoaded: true,
     };
     setBranding(data);

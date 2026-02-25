@@ -1,5 +1,6 @@
 import { Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useBranding } from "@/context/BrandingContext";
 
 interface OptInPromptProps {
   onDismiss: () => void;
@@ -7,8 +8,10 @@ interface OptInPromptProps {
 }
 
 const OptInPrompt = ({ onDismiss, isCollapsed = false }: OptInPromptProps) => {
+  const { supportEmail } = useBranding();
+
   const handleEmailClick = () => {
-    window.location.href = "mailto:ask@signmaker.ai";
+    window.location.href = `mailto:${supportEmail}`;
   };
 
   if (isCollapsed) {
@@ -52,7 +55,7 @@ const OptInPrompt = ({ onDismiss, isCollapsed = false }: OptInPromptProps) => {
         className="w-full mt-2 bg-primary text-primary-foreground text-xs h-7"
       >
         <Mail className="w-3 h-3 mr-1.5" />
-        ask@signmaker.ai
+        {supportEmail}
       </Button>
     </div>
   );

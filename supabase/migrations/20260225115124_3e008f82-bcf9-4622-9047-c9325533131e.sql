@@ -1,0 +1,1 @@
+ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS support_email text DEFAULT 'ask@signmaker.ai';
