@@ -261,6 +261,7 @@ export type Database = {
           secondary_color: string | null
           slug: string | null
           subscription_tier: string | null
+          support_email: string | null
           updated_at: string | null
         }
         Insert: {
@@ -278,6 +279,7 @@ export type Database = {
           secondary_color?: string | null
           slug?: string | null
           subscription_tier?: string | null
+          support_email?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -295,6 +297,7 @@ export type Database = {
           secondary_color?: string | null
           slug?: string | null
           subscription_tier?: string | null
+          support_email?: string | null
           updated_at?: string | null
         }
         Relationships: []

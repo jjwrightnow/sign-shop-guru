@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import OptInPrompt from "@/components/OptInPrompt";
+import { useBranding } from "@/context/BrandingContext";
 
 interface Conversation {
   id: string;
@@ -33,6 +34,7 @@ const ConversationSidebar = ({
   onOptInDismiss,
 }: ConversationSidebarProps) => {
   const navigate = useNavigate();
+  const { supportEmail } = useBranding();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const formatDate = (dateString: string) => {
@@ -179,10 +181,10 @@ const ConversationSidebar = ({
               <p className="leading-relaxed">
                 We never ask for phone numbers and will never call you. All communication is in writing via{" "}
                 <a 
-                  href="mailto:ask@signmaker.ai" 
+                  href={`mailto:${supportEmail}`} 
                   className="text-primary hover:underline"
                 >
-                  ask@signmaker.ai
+                  {supportEmail}
                 </a>
               </p>
             </div>
