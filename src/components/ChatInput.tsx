@@ -50,7 +50,7 @@ const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
   const maxHeight = 184;
 
   return (
-    <div className="sticky bottom-0 w-full bg-background pb-4 pt-2">
+    <div className="w-full bg-background border-t border-border/40 pt-3 pb-2">
       <div className="max-w-[760px] mx-auto px-4">
         <div className="relative">
           <textarea
