@@ -4,8 +4,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import IntakeFormModal from "@/components/IntakeFormModal";
-import ConversationSidebar from "@/components/ConversationSidebar";
-import OptInPrompt from "@/components/OptInPrompt";
+import SlideOutMenu from "@/components/SlideOutMenu";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
@@ -44,9 +43,6 @@ const IndexContent = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
-  const [showOptIn, setShowOptIn] = useState(false);
-  const [optInDismissed, setOptInDismissed] = useState(false);
-  const [messageCount, setMessageCount] = useState(0);
   const [showTrainMe, setShowTrainMe] = useState(false);
   const [isTrained, setIsTrained] = useState(false);
   const [transcriptSending, setTranscriptSending] = useState(false);
@@ -56,6 +52,7 @@ const IndexContent = () => {
   const [followUpSkipped, setFollowUpSkipped] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
   const [showFullGlossary, setShowFullGlossary] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,7 +63,7 @@ const IndexContent = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isTyping, showOptIn]);
+  }, [messages, isTyping]);
 
   // Check for returning user on mount
   useEffect(() => {
@@ -78,17 +75,9 @@ const IndexContent = () => {
             body: { email: storedEmail },
           });
 
-          if (userError || !userData?.user) {
-            console.log("Could not verify returning user, starting fresh");
-            return;
-          }
+          if (userError || !userData?.user) return;
 
           const user = userData.user;
-          
-          const optInDismissedStored = localStorage.getItem("signmaker_optin_dismissed");
-          if (optInDismissedStored === "true") {
-            setOptInDismissed(true);
-          }
 
           const { data: convoData } = await supabase.functions.invoke("get-conversations", {
             body: { user_id: user.id },
@@ -131,13 +120,6 @@ const IndexContent = () => {
       console.error("Error checking training status:", error);
     }
   };
-
-  useEffect(() => {
-    const userMessages = messages.filter(m => m.isUser).length;
-    if (userMessages >= 5 && !optInDismissed) {
-      setShowOptIn(true);
-    }
-  }, [messages, optInDismissed]);
 
   const loadUserConversations = async (userId: string) => {
     setIsLoadingConversations(true);
@@ -215,7 +197,6 @@ const IndexContent = () => {
           dbId: msg.id,
         }));
         setMessages(loadedMessages);
-        setMessageCount(dbMessages.filter((m: any) => m.role === "user").length);
         setShortcutsSkipped(true);
         setSelectedShortcut(null);
         setFollowUpSkipped(true);
@@ -226,7 +207,6 @@ const IndexContent = () => {
           userData?.intent || ''
         );
         setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
-        setMessageCount(0);
         setShortcutsSkipped(false);
         setSelectedShortcut(null);
         setFollowUpSkipped(false);
@@ -246,7 +226,6 @@ const IndexContent = () => {
     
     const welcomeMessage = getWelcomeMessage(data.name, data.experienceLevel, data.intent);
     setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
-    setMessageCount(0);
     setShortcutsSkipped(false);
     setSelectedShortcut(null);
     setFollowUpSkipped(false);
@@ -258,7 +237,6 @@ const IndexContent = () => {
     if (!userData) return;
 
     setUserData({ ...userData, conversationId });
-    setShowOptIn(false);
     setTranscriptAlreadySent(false);
     await loadConversationMessages(conversationId, userData.name);
   };
@@ -279,8 +257,6 @@ const IndexContent = () => {
       
       const welcomeMessage = getWelcomeMessage(userData.name, userData.experienceLevel, userData.intent);
       setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
-      setMessageCount(0);
-      setShowOptIn(false);
       setTranscriptAlreadySent(false);
       setShortcutsSkipped(false);
       setSelectedShortcut(null);
@@ -344,7 +320,6 @@ const IndexContent = () => {
         dbId: dbMessageId,
       };
       setMessages((prev) => [...prev, assistantMessage]);
-      setMessageCount((prev) => prev + 1);
 
       await loadUserConversations(userData.userId);
     } catch (error: any) {
@@ -382,38 +357,20 @@ const IndexContent = () => {
     }
   };
 
-  const handleOptInDismiss = () => {
-    setShowOptIn(false);
-    setOptInDismissed(true);
-    localStorage.setItem("signmaker_optin_dismissed", "true");
-  };
-
-  const handleTrainMeClick = () => {
-    setShowTrainMe(true);
-  };
-
-  const handleTrainingComplete = () => {
-    setIsTrained(true);
-  };
-
   const handleForgetMe = () => {
     localStorage.removeItem("signmaker_user_email");
     setUserData(null);
     setMessages([]);
     setConversations([]);
     setTranscriptAlreadySent(false);
-    toast({
-      description: "Done. You'll see the signup form next time.",
-    });
+    toast({ description: "Done. You'll see the signup form next time." });
   };
 
   const handleEmailTranscript = async () => {
     if (!userData || transcriptSending) return;
     
     if (transcriptAlreadySent) {
-      toast({
-        description: `Already sent to ${userData.email}`,
-      });
+      toast({ description: `Already sent to ${userData.email}` });
       return;
     }
 
@@ -431,14 +388,10 @@ const IndexContent = () => {
 
       if (data?.alreadySent) {
         setTranscriptAlreadySent(true);
-        toast({
-          description: `Already sent to ${userData.email}`,
-        });
+        toast({ description: `Already sent to ${userData.email}` });
       } else if (data?.success) {
         setTranscriptAlreadySent(true);
-        toast({
-          description: `Sent! Check your inbox at ${userData.email}`,
-        });
+        toast({ description: `Sent! Check your inbox at ${userData.email}` });
       } else {
         throw new Error(data?.error || "Failed to send transcript");
       }
@@ -462,19 +415,10 @@ const IndexContent = () => {
 
   const getSmartShortcutType = (): "shopper" | "professional-active" | "professional-training" | "freelancer" | null => {
     if (!userData) return null;
-    
-    if (userData.experienceLevel === 'shopper' || userData.intent === 'shopping') {
-      return "shopper";
-    }
-    if (userData.experienceLevel === 'freelancer' || userData.intent === 'leads') {
-      return "freelancer";
-    }
-    if (userData.intent === 'active') {
-      return "professional-active";
-    }
-    if (userData.intent === 'training') {
-      return "professional-training";
-    }
+    if (userData.experienceLevel === 'shopper' || userData.intent === 'shopping') return "shopper";
+    if (userData.experienceLevel === 'freelancer' || userData.intent === 'leads') return "freelancer";
+    if (userData.intent === 'active') return "professional-active";
+    if (userData.intent === 'training') return "professional-training";
     return null;
   };
 
@@ -484,7 +428,6 @@ const IndexContent = () => {
 
   const handleShortcutSelect = async (shortcut: { value: string; prompt: string }) => {
     if (!userData) return;
-    
     setSelectedShortcut(shortcut.value);
     
     try {
@@ -539,19 +482,23 @@ const IndexContent = () => {
   }, [selectedTerm]);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
       
       {userData && (
         <>
-          <ConversationSidebar
+          <SlideOutMenu
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
             conversations={conversations}
             activeConversationId={userData.conversationId}
             onSelectConversation={handleSelectConversation}
             onNewChat={handleNewChat}
-            isLoading={isLoadingConversations}
-            showOptIn={showOptIn}
-            onOptInDismiss={handleOptInDismiss}
+            onGlossaryClick={handleGlossaryClick}
+            onEmailTranscript={messages.length > 2 ? handleEmailTranscript : undefined}
+            onForgetMe={handleForgetMe}
+            transcriptSending={transcriptSending}
+            transcriptAlreadySent={transcriptAlreadySent}
           />
           
           {isSignProfessional && (
@@ -559,65 +506,54 @@ const IndexContent = () => {
               open={showTrainMe}
               onClose={() => setShowTrainMe(false)}
               userId={userData.userId}
-              onTrainingComplete={handleTrainingComplete}
+              onTrainingComplete={() => setIsTrained(true)}
             />
           )}
         </>
       )}
 
-      <div className="flex-1 flex flex-col">
-        <ChatHeader 
-          onTrainMeClick={isSignProfessional ? handleTrainMeClick : undefined}
-          isTrained={isTrained}
-          onForgetMe={userData ? handleForgetMe : undefined}
-          onEmailTranscript={userData && messages.length > 2 ? handleEmailTranscript : undefined}
-          transcriptSending={transcriptSending}
-          transcriptAlreadySent={transcriptAlreadySent}
-          userEmail={userData?.email}
-          onGlossaryClick={userData ? handleGlossaryClick : undefined}
-        />
-        
-        <main className="flex-1 overflow-y-auto">
-          <div className="container max-w-4xl mx-auto py-6 px-4">
-            <div className="flex flex-col gap-4">
-              {messages.map((message, index) => (
-                <ChatMessage
-                  key={message.id}
-                  content={message.content}
-                  isUser={message.isUser}
-                  showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
-                  messageId={message.dbId}
-                  userId={userData?.userId}
-                  conversationId={userData?.conversationId}
-                />
-              ))}
-              
-              {showSmartShortcuts && smartShortcutType && (
-                <SmartShortcuts 
-                  userType={smartShortcutType}
-                  onSelectShortcut={handleShortcutSelect}
-                  onSkip={handleShortcutsSkip}
-                />
-              )}
+      <ChatHeader onMenuClick={userData ? () => setMenuOpen(true) : undefined} />
+      
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-[760px] mx-auto py-6 px-4">
+          <div className="flex flex-col gap-6">
+            {messages.map((message, index) => (
+              <ChatMessage
+                key={message.id}
+                content={message.content}
+                isUser={message.isUser}
+                showFeedback={!message.isUser && index === messages.length - 1 && !isTyping}
+                messageId={message.dbId}
+                userId={userData?.userId}
+                conversationId={userData?.conversationId}
+              />
+            ))}
+            
+            {showSmartShortcuts && smartShortcutType && (
+              <SmartShortcuts 
+                userType={smartShortcutType}
+                onSelectShortcut={handleShortcutSelect}
+                onSkip={handleShortcutsSkip}
+              />
+            )}
 
-              {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
-                <FollowUpShortcuts
-                  initialSelection={selectedShortcut}
-                  userType={smartShortcutType}
-                  onSelectShortcut={handleFollowUpSelect}
-                  onSkip={handleFollowUpSkip}
-                />
-              )}
-              
-              {isTyping && <TypingIndicator />}
-              
-              <div ref={messagesEndRef} />
-            </div>
+            {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
+              <FollowUpShortcuts
+                initialSelection={selectedShortcut}
+                userType={smartShortcutType}
+                onSelectShortcut={handleFollowUpSelect}
+                onSkip={handleFollowUpSkip}
+              />
+            )}
+            
+            {isTyping && <TypingIndicator />}
+            
+            <div ref={messagesEndRef} />
           </div>
-        </main>
-        
-        <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
-      </div>
+        </div>
+      </main>
+      
+      <ChatInput onSend={handleSend} disabled={isTyping || !userData} />
 
       {showGlossary && (
         <GlossaryPanel 
