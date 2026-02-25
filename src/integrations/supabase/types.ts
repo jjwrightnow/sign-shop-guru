@@ -247,26 +247,53 @@ export type Database = {
       }
       companies: {
         Row: {
+          active: boolean | null
+          bot_avatar_url: string | null
           created_at: string | null
           domain: string | null
+          email_from_address: string | null
+          email_from_name: string | null
+          email_reply_to: string | null
           id: string
+          logo_url: string | null
           name: string
+          primary_color: string | null
+          secondary_color: string | null
+          slug: string | null
           subscription_tier: string | null
           updated_at: string | null
         }
         Insert: {
+          active?: boolean | null
+          bot_avatar_url?: string | null
           created_at?: string | null
           domain?: string | null
+          email_from_address?: string | null
+          email_from_name?: string | null
+          email_reply_to?: string | null
           id?: string
+          logo_url?: string | null
           name: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string | null
           subscription_tier?: string | null
           updated_at?: string | null
         }
         Update: {
+          active?: boolean | null
+          bot_avatar_url?: string | null
           created_at?: string | null
           domain?: string | null
+          email_from_address?: string | null
+          email_from_name?: string | null
+          email_reply_to?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string | null
           subscription_tier?: string | null
           updated_at?: string | null
         }
