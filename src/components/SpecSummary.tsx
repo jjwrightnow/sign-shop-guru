@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 interface SpecSummaryProps {
   specs: Record<string, string>;
   visible: boolean;
+  onSubmit?: () => void;
 }
 
 const specFields = [
@@ -79,7 +80,7 @@ const LAYER_OPTIONS: Record<string, { id: string; label: string; note: string }[
   ],
 };
 
-const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
+const SpecSummary = ({ specs, visible, onSubmit }: SpecSummaryProps) => {
   const [activeLayer, setActiveLayer] = useState<string | null>(null);
   const [chosenLayers, setChosenLayers] = useState<Record<string, string>>({});
 
@@ -94,20 +95,22 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
   const cat = profileName ? (PROFILE_TO_CAT[profileName] ?? 'nonlit') : null;
   const visibleLayers = cat ? LAYERS.filter(l => l.applies.includes(cat)) : [];
 
+  const hasAnySpec = Object.values(specs).some(v => v && v !== "—");
+
   return (
-    <>
+    <div className="flex flex-col h-full">
       {/* Lighting profile illustration */}
       <div className="w-full rounded-lg border border-border/60 bg-muted/30 mb-3 overflow-hidden">
-        <div className="w-full h-[160px] flex items-center justify-center bg-muted/50">
+        <div className="w-full h-[120px] flex items-center justify-center bg-muted/50">
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <div className="w-12 h-12 rounded-lg bg-border/40 flex items-center justify-center">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <div className="w-10 h-10 rounded-lg bg-border/40 flex items-center justify-center">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <circle cx="8.5" cy="8.5" r="1.5"/>
                 <polyline points="21 15 16 10 5 21"/>
               </svg>
             </div>
-            <span className="text-[11px]">
+            <span className="text-[10px]">
               {profileName
                 ? profileName + " profile"
                 : "Lighting profile illustration"}
@@ -120,7 +123,7 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
       {profileName && visibleLayers.length > 0 && (
         <div className="rounded-lg border border-border/60 bg-muted/30 overflow-hidden mb-3">
           <div className="px-3 py-2 border-b border-border/40">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
               Layers — front to back
             </p>
           </div>
@@ -135,7 +138,7 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
                     color: activeLayer === layer.id ? layer.activeColor : undefined,
                     boxShadow: activeLayer === layer.id ? `0 0 8px ${layer.activeColor}44` : undefined,
                   }}
-                  className={`px-2.5 py-1 text-[10px] rounded border transition-all
+                  className={`px-2 py-0.5 text-[9px] rounded border transition-all
                     ${activeLayer === layer.id
                       ? 'bg-white/5 font-semibold'
                       : 'border-border text-muted-foreground hover:border-white/30'
@@ -144,7 +147,7 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
                   {layer.label}
                 </button>
                 {i < visibleLayers.length - 1 && (
-                  <span className="text-[9px] text-muted-foreground/40">→</span>
+                  <span className="text-[8px] text-muted-foreground/40">→</span>
                 )}
               </div>
             ))}
@@ -153,22 +156,22 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
           {/* Layer option panel */}
           {activeLayer && LAYER_OPTIONS[activeLayer] && (
             <div className="px-3 pb-3">
-              <p className="text-[10px] text-muted-foreground mb-2">
+              <p className="text-[9px] text-muted-foreground mb-2">
                 {LAYER_DESCRIPTIONS[activeLayer]}
               </p>
-              <div className="grid grid-cols-1 gap-1.5">
+              <div className="grid grid-cols-1 gap-1">
                 {LAYER_OPTIONS[activeLayer].map(opt => (
                   <button
                     key={opt.id}
                     onClick={() => setChosenLayers(prev => ({ ...prev, [activeLayer]: opt.id }))}
-                    className={`text-left px-2.5 py-2 rounded border text-[11px] transition-all
+                    className={`text-left px-2 py-1.5 rounded border text-[10px] transition-all
                       ${chosenLayers[activeLayer] === opt.id
                         ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
                         : 'border-border bg-background/50 text-muted-foreground hover:border-white/20'
                       }`}
                   >
                     <span className="block font-medium">{opt.label}</span>
-                    <span className="block text-[10px] opacity-70">{opt.note}</span>
+                    <span className="block text-[9px] opacity-70">{opt.note}</span>
                   </button>
                 ))}
               </div>
@@ -180,7 +183,7 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
       {/* Spec fields */}
       <div className="rounded-lg border border-border/60 bg-muted/30 overflow-hidden">
         <div className="px-3 py-2 border-b border-border/40">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
             Project Spec
           </p>
         </div>
@@ -189,10 +192,10 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
             const value = specs[key];
             const hasValue = value && value !== "—";
             return (
-              <div key={key} className="flex items-center justify-between px-3 py-2">
-                <span className="text-[11px] text-muted-foreground">{label}</span>
+              <div key={key} className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-[10px] text-muted-foreground">{label}</span>
                 <span
-                  className={`text-[13px] ${
+                  className={`text-[12px] ${
                     hasValue ? "text-primary font-medium" : "text-muted-foreground"
                   }`}
                 >
@@ -203,7 +206,23 @@ const SpecSummary = ({ specs, visible }: SpecSummaryProps) => {
           })}
         </div>
       </div>
-    </>
+
+      {/* Submit button */}
+      {hasAnySpec && onSubmit && (
+        <div className="p-3 border-t border-border mt-auto">
+          <button
+            onClick={onSubmit}
+            className="w-full py-2.5 px-4 rounded-lg bg-amber-500 hover:bg-amber-400
+                       text-black font-semibold text-sm transition-colors"
+          >
+            Request Quote →
+          </button>
+          <p className="text-[10px] text-muted-foreground text-center mt-2">
+            Quote delivered by email · No pricing shown here
+          </p>
+        </div>
+      )}
+    </div>
   );
 };
 
