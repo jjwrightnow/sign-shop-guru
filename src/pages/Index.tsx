@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import ChatHeader from "@/components/ChatHeader";
-import ChatMessage from "@/components/ChatMessage";
+import ChatMessage, { type ChoiceCard } from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import TypingIndicator from "@/components/TypingIndicator";
 import IntakeFormModal from "@/components/IntakeFormModal";
@@ -8,19 +8,24 @@ import SlideOutMenu from "@/components/SlideOutMenu";
 import TrainMePanel from "@/components/TrainMePanel";
 import SmartShortcuts from "@/components/SmartShortcuts";
 import FollowUpShortcuts from "@/components/FollowUpShortcuts";
-import ContextPanel, { type ContextMode, type PdfPage, type SignAssignments, PROFILE_NAME_TO_SKU } from "@/components/ContextPanel";
-import SelectionGrid from "@/components/SelectionGrid";
 import SpecSummary from "@/components/SpecSummary";
+import StepProgress from "@/components/StepProgress";
 import { GlossaryProvider, useGlossary } from "@/components/GlossaryContext";
 import { GlossaryPanel } from "@/components/GlossaryPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+const N8N_CHAT_URL = "https://americanveteranowned.app.n8n.cloud/webhook/09cb1d89-72cc-4b58-a391-2a6f3e688bc4/chat";
 
 interface Message {
   id: string;
   content: string;
   isUser: boolean;
   dbId?: string;
+  choiceCards?: ChoiceCard[];
+  choiceType?: "single" | "grid";
+  choicesUsed?: boolean;
 }
 
 interface UserData {
@@ -39,10 +44,135 @@ interface ConversationData {
   message_count?: number;
 }
 
+const FLOW_STAGES: Record<number, {
+  aiMessage: string;
+  choiceCards: ChoiceCard[];
+  choiceType: "single" | "grid";
+  specsKey?: string;
+}> = {
+  0: {
+    aiMessage: "Hey, I'm LetterMan — your sign industry guide. What are we working on today?",
+    choiceCards: [
+      { id: "upload",    label: "Upload Artwork",     icon: "📎", sublabel: "PDF, AI, EPS, PNG, JPG" },
+      { id: "describe",  label: "Describe My Sign",   icon: "✏️", sublabel: "I'll guide you through it" },
+      { id: "pro",       label: "I'm a Pro",          icon: "⚡", sublabel: "I know my specs" },
+      { id: "questions", label: "Just Browsing",      icon: "🔍", sublabel: "Learning about sign types" },
+    ],
+    choiceType: "grid",
+  },
+  1: {
+    aiMessage: "Is this sign going inside or outside?",
+    choiceCards: [
+      { id: "interior", label: "Interior",  icon: "🏢", sublabel: "Lobby, retail, restaurant" },
+      { id: "exterior", label: "Exterior",  icon: "🌧",  sublabel: "Storefront, monument, outdoor" },
+      { id: "both",     label: "Both",      icon: "↔️",  sublabel: "Multiple locations" },
+    ],
+    choiceType: "single",
+    specsKey: "environment",
+  },
+  2: {
+    aiMessage: "How do you want your sign to light up? These are the most popular options — or I can show you all 16.",
+    choiceCards: [
+      { id: "halo",      label: "Halo Lit",     sublabel: "Glow behind the letter",   icon: "💡" },
+      { id: "face",      label: "Face Lit",      sublabel: "Bright face illumination", icon: "💡" },
+      { id: "face_halo", label: "Face + Halo",   sublabel: "Maximum impact",           icon: "💡" },
+      { id: "non_lit",   label: "Non-Illuminated", sublabel: "Pure metal, no LEDs",   icon: "💡" },
+      { id: "faux_neon", label: "Faux Neon",     sublabel: "LED flex tube, lower cost", icon: "💡" },
+      { id: "show_all",  label: "Show All 16 →", sublabel: "See every option",         icon: "⋯" },
+    ],
+    choiceType: "grid",
+    specsKey: "lighting_profile",
+  },
+  3: {
+    aiMessage: "What's your approximate budget for this project? This helps me guide you toward the right options — it's not a commitment.",
+    choiceCards: [
+      { id: "under_1k",  label: "Under $1,000",    sublabel: "Faux Neon range",         icon: "💡" },
+      { id: "1k_2500",   label: "$1,000 – $2,500",  sublabel: "Entry metal signs",       icon: "✦" },
+      { id: "2500_5k",   label: "$2,500 – $5,000",  sublabel: "Premium profiles",        icon: "✦✦" },
+      { id: "5k_plus",   label: "$5,000+",           sublabel: "Multi-sign, luxury spec", icon: "✦✦✦" },
+    ],
+    choiceType: "grid",
+    specsKey: "price_range",
+  },
+  4: {
+    aiMessage: "What metal are you thinking? Most popular for exterior signs is brushed stainless.",
+    choiceCards: [
+      { id: "ss304",    label: "Stainless 304",    sublabel: "Most popular · Interior/Exterior", icon: "◈" },
+      { id: "ss316",    label: "Stainless 316",    sublabel: "Coastal/marine grade",             icon: "◈" },
+      { id: "brass",    label: "Brass",             sublabel: "Warm gold · Interior",             icon: "◈" },
+      { id: "copper",   label: "Copper",            sublabel: "Rich tone · Patinas over time",    icon: "◈" },
+      { id: "titanium", label: "Titanium PVD",      sublabel: "Ultra-premium · Gold/Black/Rose",  icon: "◈" },
+      { id: "corten",   label: "Corten Steel",      sublabel: "Weathered rust · Exterior",        icon: "◈" },
+    ],
+    choiceType: "grid",
+    specsKey: "material",
+  },
+  5: {
+    aiMessage: "Roughly how tall are the letters? This affects fabrication complexity and cost range.",
+    choiceCards: [
+      { id: "3_5",    label: "3\" – 5\"",   sublabel: "Small, fine detail",    icon: "↕" },
+      { id: "6_8",    label: "6\" – 8\"",   sublabel: "Standard storefront",   icon: "↕" },
+      { id: "9_12",   label: "9\" – 12\"",  sublabel: "High visibility",       icon: "↕" },
+      { id: "12plus", label: "12\" +",      sublabel: "Monument / landmark",   icon: "↕" },
+    ],
+    choiceType: "grid",
+    specsKey: "height",
+  },
+  6: {
+    aiMessage: "How will the sign mount to the wall?",
+    choiceCards: [
+      { id: "standoff",  label: "Standoff Studs",  sublabel: "Gap from wall · Halo-ready",   icon: "⊕" },
+      { id: "flush",     label: "Flush Mount",      sublabel: "Flat against surface",          icon: "⊕" },
+      { id: "raceway",   label: "Raceway Box",      sublabel: "Conceals all wiring",           icon: "⊕" },
+      { id: "not_sure",  label: "Not Sure",         sublabel: "Factory will recommend",        icon: "?" },
+    ],
+    choiceType: "grid",
+    specsKey: "mounting",
+  },
+  7: {
+    aiMessage: "When do you need this? This helps us route your quote to the right production queue.",
+    choiceCards: [
+      { id: "asap",     label: "ASAP",           sublabel: "Rush — contact us to discuss", icon: "🔥" },
+      { id: "2_4wk",    label: "2 – 4 weeks",    sublabel: "Standard lead time",           icon: "📅" },
+      { id: "1_2mo",    label: "1 – 2 months",   sublabel: "Normal planning cycle",        icon: "📅" },
+      { id: "planning", label: "Just Planning",  sublabel: "No rush, early stage",         icon: "💭" },
+    ],
+    choiceType: "grid",
+    specsKey: "timeline",
+  },
+};
+
+const sendToLetterMan = async (message: string, sessionId: string): Promise<string> => {
+  try {
+    const res = await fetch(N8N_CHAT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chatInput: message,
+        sessionId: sessionId,
+      }),
+    });
+    const data = await res.json();
+    return data.output || data.text || data.message || "I didn't catch that — could you rephrase?";
+  } catch {
+    return "Something went wrong. Please try again.";
+  }
+};
+
+const INITIAL_MESSAGE: Message = {
+  id: "welcome",
+  content: FLOW_STAGES[0].aiMessage,
+  isUser: false,
+  choiceCards: FLOW_STAGES[0].choiceCards,
+  choiceType: FLOW_STAGES[0].choiceType,
+  choicesUsed: false,
+};
+
 const IndexContent = () => {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [isTyping, setIsTyping] = useState(false);
   const [conversations, setConversations] = useState<ConversationData[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
@@ -56,18 +186,11 @@ const IndexContent = () => {
   const [showGlossary, setShowGlossary] = useState(false);
   const [showFullGlossary, setShowFullGlossary] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [contextMode, setContextMode] = useState<ContextMode>("dropzone");
-  const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [currentStage, setCurrentStage] = useState(0);
   const [specs, setSpecs] = useState<Record<string, string>>({});
-  const [selectionVisible, setSelectionVisible] = useState(true);
-  const [pdfPages, setPdfPages] = useState<PdfPage[]>([]);
-  const [activePdfPage, setActivePdfPage] = useState(1);
-  const [signAssignments, setSignAssignments] = useState<SignAssignments>({});
-  const [uploadedFileName, setUploadedFileName] = useState('');
-  const [pdfSubmitting, setPdfSubmitting] = useState(false);
-  const [pdfSubmitted, setPdfSubmitted] = useState(false);
-  
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const [showMobileSpec, setShowMobileSpec] = useState(false);
+
   const { selectedTerm, setSelectedTerm } = useGlossary();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -179,22 +302,6 @@ const IndexContent = () => {
     }
   };
 
-  const getWelcomeMessage = (name: string, experienceLevel: string, intent: string): string => {
-    if (experienceLevel === 'shopper' || intent === 'shopping') {
-      return `Hey ${name} — I'll help you understand your sign options. What kind of sign are you thinking about?`;
-    }
-    if (experienceLevel === 'freelancer' || intent === 'leads') {
-      return `Hey ${name} — I can help you find leads and connect with sign shops. What services do you offer?`;
-    }
-    if (intent === 'active') {
-      return `Hey ${name} — I'm here to help with your project. What are you working on?`;
-    }
-    if (intent === 'training') {
-      return `Hey ${name} — Ready to learn! What topic would you like to dive into?`;
-    }
-    return `Hey ${name} — I help with signage and fabrication questions. What would you like to know?`;
-  };
-
   const loadConversationMessages = async (conversationId: string, userName: string) => {
     try {
       const { data, error } = await supabase.functions.invoke("get-messages", {
@@ -216,12 +323,7 @@ const IndexContent = () => {
         setSelectedShortcut(null);
         setFollowUpSkipped(true);
       } else {
-        const welcomeMessage = getWelcomeMessage(
-          userName, 
-          userData?.experienceLevel || '', 
-          userData?.intent || ''
-        );
-        setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+        setMessages([INITIAL_MESSAGE]);
         setShortcutsSkipped(false);
         setSelectedShortcut(null);
         setFollowUpSkipped(false);
@@ -238,9 +340,7 @@ const IndexContent = () => {
     }
 
     setUserData(data);
-    
-    const welcomeMessage = getWelcomeMessage(data.name, data.experienceLevel, data.intent);
-    setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+    setMessages([INITIAL_MESSAGE]);
     setShortcutsSkipped(false);
     setSelectedShortcut(null);
     setFollowUpSkipped(false);
@@ -269,9 +369,9 @@ const IndexContent = () => {
       if (error) throw error;
 
       setUserData({ ...userData, conversationId: newConvo.id });
-      
-      const welcomeMessage = getWelcomeMessage(userData.name, userData.experienceLevel, userData.intent);
-      setMessages([{ id: "welcome", content: welcomeMessage, isUser: false }]);
+      setMessages([INITIAL_MESSAGE]);
+      setCurrentStage(0);
+      setSpecs({});
       setTranscriptAlreadySent(false);
       setShortcutsSkipped(false);
       setSelectedShortcut(null);
@@ -301,19 +401,25 @@ const IndexContent = () => {
     setIsTyping(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke("chat", {
-        body: {
-          question: content,
-          user_context: {
-            name: userData.name,
-            experience_level: userData.experienceLevel,
-            intent: userData.intent,
-          },
-          conversation_id: userData.conversationId,
-        },
-      });
+      // Send to n8n LetterMan
+      const aiResponse = await sendToLetterMan(content, userData?.conversationId || sessionId);
 
-      if (error) throw error;
+      // Also save to Supabase for persistence
+      try {
+        await supabase.functions.invoke("chat", {
+          body: {
+            question: content,
+            user_context: {
+              name: userData.name,
+              experience_level: userData.experienceLevel,
+              intent: userData.intent,
+            },
+            conversation_id: userData.conversationId,
+          },
+        });
+      } catch (e) {
+        console.error("Error saving to Supabase:", e);
+      }
 
       let dbMessageId: string | undefined;
       try {
@@ -330,7 +436,7 @@ const IndexContent = () => {
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
-        content: data.response,
+        content: aiResponse,
         isUser: false,
         dbId: dbMessageId,
       };
@@ -375,7 +481,7 @@ const IndexContent = () => {
   const handleForgetMe = () => {
     localStorage.removeItem("signmaker_user_email");
     setUserData(null);
-    setMessages([]);
+    setMessages([INITIAL_MESSAGE]);
     setConversations([]);
     setTranscriptAlreadySent(false);
     toast({ description: "Done. You'll see the signup form next time." });
@@ -496,129 +602,119 @@ const IndexContent = () => {
     }
   }, [selectedTerm]);
 
-  const isDev = import.meta.env.DEV;
+  // Choice card selection handler
+  const handleChoiceSelect = (card: ChoiceCard) => {
+    // Mark current stage cards as used
+    setMessages(prev => prev.map(msg =>
+      msg.choiceCards && !msg.choicesUsed
+        ? { ...msg, choicesUsed: true }
+        : msg
+    ));
 
-  const handlePdfUpload = async (file: File) => {
-    const { pdfjsLib } = await import('@/lib/pdfConfig');
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    // Add user message showing their choice
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      content: card.label + (card.sublabel ? ` — ${card.sublabel}` : ""),
+      isUser: true,
+    };
+    setMessages(prev => [...prev, userMsg]);
 
-    const pages: PdfPage[] = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.5 });
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      await page.render({
-        canvasContext: canvas.getContext('2d')!,
-        viewport,
-      }).promise;
-      pages.push({ pageNum: i, dataUrl: canvas.toDataURL(), signName: `Sign ${i}` });
+    // Update specs strip
+    const stage = FLOW_STAGES[currentStage];
+    if (stage?.specsKey) {
+      setSpecs(prev => ({ ...prev, [stage.specsKey!]: card.label }));
     }
 
-    setPdfPages(pages);
-    setUploadedFileName(file.name);
-    setActivePdfPage(1);
-    setContextMode('pdf');
-
-    const assignments: SignAssignments = {};
-    pages.forEach(p => {
-      assignments[p.pageNum] = { signName: `Sign ${p.pageNum}`, profileSku: null, mergedInto: null };
-    });
-    setSignAssignments(assignments);
-
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      content: `Got it — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} loaded from "${file.name}". Each page is a separate sign by default. Browse the pages below, name each sign, and assign a lighting profile. Unassigned pages go to the factory for recommendation.`,
-      isUser: false,
-    }]);
-  };
-
-  const handleFileDrop = (file: File | null) => {
-    if (file && (file.type === 'application/pdf' || file.name.endsWith('.pdf'))) {
-      handlePdfUpload(file);
+    // Handle special cards
+    if (card.id === "upload") {
+      // For now just send as message
+      handleSend("I'd like to upload my artwork file.");
       return;
     }
-    setDroppedFile(file);
-    if (file) setContextMode("artwork");
+
+    if (card.id === "pro") {
+      handleSend("I'm a sign industry professional. I know my specs.");
+      return;
+    }
+
+    if (card.id === "show_all") {
+      handleSend("Show me all 16 lighting profiles");
+      return;
+    }
+
+    // Budget tier — send to LetterMan for contextual guidance
+    if (currentStage === 3) {
+      const budgetContext: Record<string, string> = {
+        "under_1k":  "My budget is under $1,000. What are my realistic options?",
+        "1k_2500":   "My budget is $1,000 to $2,500.",
+        "2500_5k":   "My budget is $2,500 to $5,000.",
+        "5k_plus":   "My budget is $5,000 or more.",
+      };
+      handleSend(budgetContext[card.id] || card.label);
+      return;
+    }
+
+    // Advance stage and show next question
+    const nextStage = currentStage + 1;
+    if (nextStage <= 7) {
+      setCurrentStage(nextStage);
+      const next = FLOW_STAGES[nextStage];
+      if (next) {
+        setIsTyping(true);
+        setTimeout(() => {
+          setIsTyping(false);
+          const aiMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            content: next.aiMessage,
+            isUser: false,
+            choiceCards: next.choiceCards,
+            choiceType: next.choiceType,
+            choicesUsed: false,
+          };
+          setMessages(prev => [...prev, aiMsg]);
+          // Also send to LetterMan for memory
+          sendToLetterMan(`User selected: ${card.label}`, userData?.conversationId || sessionId);
+        }, 800);
+      }
+    } else {
+      handleSubmitQuote();
+    }
   };
 
-  const handleSubmitSigns = async () => {
-    setPdfSubmitting(true);
-    const mergedPageNums = new Set(
-      Object.entries(signAssignments)
-        .filter(([, a]) => a.mergedInto !== null)
-        .map(([p]) => parseInt(p))
-    );
+  const handleSubmitQuote = () => {
+    setIsTyping(true);
+    setTimeout(() => {
+      setIsTyping(false);
+      const summary = Object.entries(specs)
+        .filter(([, v]) => v && v !== "—")
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(" · ");
 
-    const records = Object.entries(signAssignments)
-      .filter(([pageNum]) => !mergedPageNums.has(parseInt(pageNum)))
-      .map(([pageNum, a]) => {
-        const num = parseInt(pageNum);
-        const mergedPages = Object.entries(signAssignments)
-          .filter(([, ass]) => ass.mergedInto === num)
-          .map(([p]) => parseInt(p));
-        const allPages = [num, ...mergedPages].sort((x, y) => x - y);
-        const profileName = a.profileSku
-          ? Object.entries(PROFILE_NAME_TO_SKU).find(([, sku]) => sku === a.profileSku)?.[0] ?? null
-          : null;
-        return {
-          sign_name: a.signName,
-          profile_name: profileName,
-          profile_sku: a.profileSku,
-          artwork_pages: allPages.join(', '),
-          artwork_file: uploadedFileName,
-          status: a.profileSku ? 'Submitted' : 'Needs Profile Review',
-        };
-      });
-
-    try {
-      await fetch('https://americanveteranowned.app.n8n.cloud/webhook/quote-submission', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'signmaker-configurator',
-          project_name: uploadedFileName,
-          submitted_at: new Date().toISOString(),
-          signs: records,
-        }),
-      });
-      setPdfSubmitted(true);
-      setMessages(prev => [...prev, {
+      const aiMsg: Message = {
         id: Date.now().toString(),
-        content: `Submitted. ${records.length} signs sent for factory review. ${records.filter(r => r.profile_sku).length} have profiles assigned — ${records.filter(r => !r.profile_sku).length} will be recommended by the factory. You'll receive an email when proofs are ready.`,
+        content: `Here's what I have:\n\n${summary}\n\nYour quote request has been sent to our team. You'll receive a detailed quote by email — typically within 1 business day. Is there anything else you'd like to add or change?`,
         isUser: false,
-      }]);
-    } finally {
-      setPdfSubmitting(false);
-    }
-  };
+      };
+      setMessages(prev => [...prev, aiMsg]);
 
-  const handleResetPdf = () => {
-    setPdfPages([]);
-    setActivePdfPage(1);
-    setSignAssignments({});
-    setUploadedFileName('');
-    setPdfSubmitted(false);
-    setContextMode('dropzone');
-  };
-
-  const handleSelectionGridSelect = (value: string) => {
-    if (textareaRef.current) {
-      // Update both the DOM value and React state via native input event
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, 'value'
-      )?.set;
-      nativeInputValueSetter?.call(textareaRef.current, value);
-      textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
-      textareaRef.current.focus();
-    }
-    setSelectionVisible(false);
+      // POST to n8n quote submission webhook
+      fetch("https://americanveteranowned.app.n8n.cloud/webhook/quote-submission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "sign-shop-guru",
+          specs,
+          email: userData?.email || null,
+          name: userData?.name || null,
+          conversationId: userData?.conversationId || null,
+          submitted_at: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+    }, 1000);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
       <IntakeFormModal open={!userData} onComplete={handleIntakeComplete} />
       
       {userData && (
@@ -650,22 +746,40 @@ const IndexContent = () => {
 
       {/* Header */}
       <ChatHeader onMenuClick={userData ? () => setMenuOpen(true) : undefined} />
-      
-      {/* Three-column grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] overflow-hidden">
-        
-        {/* Left column — selection grid */}
-        <div className="hidden lg:flex flex-col overflow-y-auto p-2 border-r border-border/40">
-          <SelectionGrid
-            stage={currentStage}
-            visible={selectionVisible}
-            onSelect={handleSelectionGridSelect}
-          />
-        </div>
 
-        {/* Center column — existing chat */}
+      {/* Mobile spec pill */}
+      {isMobile && Object.values(specs).some(v => v && v !== "—") && (
+        <div
+          onClick={() => setShowMobileSpec(prev => !prev)}
+          className="md:hidden mx-4 mb-2 px-3 py-1.5 rounded-full border border-amber-500/40
+                     bg-amber-500/10 text-amber-400 text-xs cursor-pointer truncate"
+        >
+          {Object.entries(specs)
+            .filter(([, v]) => v && v !== "—")
+            .map(([, v]) => v)
+            .join(" · ")}
+        </div>
+      )}
+
+      {/* Mobile spec sheet */}
+      {isMobile && showMobileSpec && (
+        <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-background border-t border-border p-4 max-h-[60vh] overflow-y-auto rounded-t-2xl shadow-2xl">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Project Spec</span>
+            <button onClick={() => setShowMobileSpec(false)} className="text-xs text-muted-foreground">Close</button>
+          </div>
+          <SpecSummary specs={specs} visible={true} onSubmit={handleSubmitQuote} />
+        </div>
+      )}
+
+      {/* Body */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Chat area */}
         <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Zone 1 — Chat messages (scrollable) */}
+          {/* Step progress bar */}
+          <StepProgress currentStep={currentStage} />
+
+          {/* Messages */}
           <main className="flex-1 overflow-y-auto min-h-0">
             <div className="max-w-[760px] mx-auto py-6 px-4">
               <div className="flex flex-col gap-6">
@@ -678,6 +792,10 @@ const IndexContent = () => {
                     messageId={message.dbId}
                     userId={userData?.userId}
                     conversationId={userData?.conversationId}
+                    choiceCards={message.choiceCards}
+                    choiceType={message.choiceType}
+                    choicesUsed={message.choicesUsed}
+                    onChoiceSelect={handleChoiceSelect}
                   />
                 ))}
                 
@@ -705,80 +823,15 @@ const IndexContent = () => {
             </div>
           </main>
           
-          {/* Zone 2 — Input bar */}
-          <ChatInput ref={textareaRef} onSend={handleSend} disabled={isTyping || !userData} />
-
-          {/* Debug controls (dev only) */}
-          {isDev && (
-            <div className="max-w-[760px] mx-auto px-4 pb-1 flex gap-2 justify-center">
-              <div className="flex gap-1">
-                {(["dropzone", "spec", "illustration", "artwork", "pdf"] as ContextMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setContextMode(mode)}
-                    className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${
-                      contextMode === mode
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-1 items-center">
-                <button
-                  onClick={() => setCurrentStage(s => Math.max(0, s - 1))}
-                  className="text-[10px] px-2 py-0.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted"
-                >
-                  − Stage
-                </button>
-                <span className="text-[10px] text-muted-foreground">Stage {currentStage}</span>
-                <button
-                  onClick={() => setCurrentStage(s => Math.min(10, s + 1))}
-                  className="text-[10px] px-2 py-0.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted"
-                >
-                  + Stage
-                </button>
-                <button
-                  onClick={() => setSelectionVisible(v => !v)}
-                  className="text-[10px] px-2 py-0.5 rounded-md bg-muted/50 text-muted-foreground hover:bg-muted"
-                >
-                  {selectionVisible ? "Hide" : "Show"} Grid
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Zone 3 — Context panel (fixed height) */}
-          <ContextPanel
-            mode={contextMode}
-            droppedFile={droppedFile}
-            onFileDrop={handleFileDrop}
-            pdfPages={pdfPages}
-            activePdfPage={activePdfPage}
-            onPdfPageChange={setActivePdfPage}
-            assignments={signAssignments}
-            onAssign={(pageNum, field, value) => {
-              setSignAssignments(prev => ({
-                ...prev,
-                [pageNum]: { ...prev[pageNum], [field]: value }
-              }));
-            }}
-            onSubmitSigns={handleSubmitSigns}
-            submitting={pdfSubmitting}
-            submitted={pdfSubmitted}
-            uploadedFileName={uploadedFileName}
-            onResetPdf={handleResetPdf}
-          />
+          {/* Input bar */}
+          <div className="border-t border-border bg-background">
+            <ChatInput ref={textareaRef} onSend={handleSend} disabled={isTyping || !userData} />
+          </div>
         </div>
 
-        {/* Right column — spec summary */}
-        <div className="hidden lg:flex flex-col overflow-y-auto p-2 border-l border-border/40">
-          <SpecSummary
-            specs={specs}
-            visible={messages.length > 0}
-          />
+        {/* Spec strip — desktop only */}
+        <div className="hidden md:flex w-[280px] border-l border-border flex-col overflow-y-auto p-3">
+          <SpecSummary specs={specs} visible={true} onSubmit={handleSubmitQuote} />
         </div>
       </div>
 

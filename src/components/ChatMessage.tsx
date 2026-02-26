@@ -6,6 +6,14 @@ import { useToast } from "@/hooks/use-toast";
 import { GlossaryHighlighter } from "./GlossaryHighlighter";
 import { useBranding } from "@/context/BrandingContext";
 
+export interface ChoiceCard {
+  id: string;
+  label: string;
+  sublabel?: string;
+  imageUrl?: string;
+  icon?: string;
+}
+
 interface ChatMessageProps {
   content: string;
   isUser: boolean;
@@ -13,6 +21,10 @@ interface ChatMessageProps {
   messageId?: string;
   userId?: string;
   conversationId?: string;
+  choiceCards?: ChoiceCard[];
+  choiceType?: "single" | "grid";
+  choicesUsed?: boolean;
+  onChoiceSelect?: (card: ChoiceCard) => void;
 }
 
 // Parse message content for images and text
@@ -59,7 +71,10 @@ const parseMessageContent = (content: string) => {
   return parts.length > 0 ? parts : [{ type: 'text' as const, content }];
 };
 
-const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId, conversationId }: ChatMessageProps) => {
+const ChatMessage = ({
+  content, isUser, showFeedback = false, messageId, userId, conversationId,
+  choiceCards, choiceType = "grid", choicesUsed, onChoiceSelect,
+}: ChatMessageProps) => {
   const { toast } = useToast();
   const { botAvatarUrl } = useBranding();
   const [feedbackGiven, setFeedbackGiven] = useState<"helpful" | "not_helpful" | null>(null);
@@ -164,6 +179,45 @@ const ChatMessage = ({ content, isUser, showFeedback = false, messageId, userId,
             <p key={index} className="text-sm leading-relaxed whitespace-pre-wrap">{part.content}</p>
           );
         })}
+
+        {/* Choice cards */}
+        {!isUser && choiceCards && choiceCards.length > 0 && !choicesUsed && (
+          <div className={`mt-3 grid gap-2 ${
+            choiceType === "grid"
+              ? "grid-cols-2 sm:grid-cols-3"
+              : "grid-cols-1 sm:grid-cols-2"
+          }`}>
+            {choiceCards.map(card => (
+              <button
+                key={card.id}
+                onClick={() => onChoiceSelect?.(card)}
+                className="flex flex-col items-center gap-2 p-3 rounded-xl border border-border
+                           bg-card hover:border-amber-500/50 hover:bg-amber-500/5
+                           transition-all text-left group"
+              >
+                {card.imageUrl ? (
+                  <img
+                    src={card.imageUrl}
+                    alt={card.label}
+                    className="w-full h-20 object-contain rounded-lg bg-muted/20"
+                  />
+                ) : card.icon ? (
+                  <span className="text-3xl">{card.icon}</span>
+                ) : null}
+                <div className="text-center">
+                  <div className="text-sm font-medium text-foreground group-hover:text-amber-400 transition-colors">
+                    {card.label}
+                  </div>
+                  {card.sublabel && (
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {card.sublabel}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
         
         {showFeedback && !isUser && (
           <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border/30">
