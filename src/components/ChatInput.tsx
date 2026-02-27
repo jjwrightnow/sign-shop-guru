@@ -133,7 +133,7 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({ onSend, dis
         </div>
         
         <p className="text-[11px] text-muted-foreground text-center mt-2">
-          {companyName} provides general guidance — always verify codes with local authorities.
+          Quote delivered by email after factory review · No pricing shown
         </p>
       </div>
     </div>

@@ -10,7 +10,7 @@ const ChatHeader = ({ onMenuClick }: ChatHeaderProps) => {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="flex h-14 items-center justify-between px-4 max-w-[760px] mx-auto">
+      <div className="flex h-14 items-center justify-between px-4 w-full">
         <div className="flex items-center gap-2.5">
           {logoUrl ? (
             <img src={logoUrl} alt={companyName} className="h-8 w-auto max-w-[140px] object-contain" />

@@ -820,22 +820,6 @@ const IndexContent = () => {
                   />
                 ))}
                 
-                {showSmartShortcuts && smartShortcutType && (
-                  <SmartShortcuts 
-                    userType={smartShortcutType}
-                    onSelectShortcut={handleShortcutSelect}
-                    onSkip={handleShortcutsSkip}
-                  />
-                )}
-
-                {showFollowUpShortcuts && smartShortcutType && selectedShortcut && (
-                  <FollowUpShortcuts
-                    initialSelection={selectedShortcut}
-                    userType={smartShortcutType}
-                    onSelectShortcut={handleFollowUpSelect}
-                    onSkip={handleFollowUpSkip}
-                  />
-                )}
                 
                 {isTyping && <TypingIndicator />}
                 
