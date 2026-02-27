@@ -84,7 +84,7 @@ No phone calls. If asked:
 
 NEVER:
 - Discuss design, fonts, colors, or aesthetics
-- Redirect to another website
+- Redirect to another website or mention other platforms
 - Name competitors or specific manufacturers
 - Give pricing
 - Promise lead times or availability
