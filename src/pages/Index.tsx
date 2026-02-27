@@ -92,7 +92,7 @@ const FLOW_STAGES: Record<number, {
       { id: "5k_plus",   label: "$5,000+",           sublabel: "Multi-sign, luxury spec", icon: "✦✦✦" },
     ],
     choiceType: "grid",
-    specsKey: "price_range",
+    specsKey: "budget",
   },
   4: {
     aiMessage: "What metal are you thinking? Most popular for exterior signs is brushed stainless.",
@@ -748,7 +748,7 @@ const IndexContent = () => {
       <ChatHeader onMenuClick={userData ? () => setMenuOpen(true) : undefined} />
 
       {/* Mobile spec pill */}
-      {isMobile && Object.values(specs).some(v => v && v !== "—") && (
+      {Object.values(specs).some(v => v && v !== "—") && (
         <div
           onClick={() => setShowMobileSpec(prev => !prev)}
           className="md:hidden mx-4 mb-2 px-3 py-1.5 rounded-full border border-amber-500/40
@@ -761,16 +761,37 @@ const IndexContent = () => {
         </div>
       )}
 
-      {/* Mobile spec sheet */}
-      {isMobile && showMobileSpec && (
-        <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-background border-t border-border p-4 max-h-[60vh] overflow-y-auto rounded-t-2xl shadow-2xl">
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Project Spec</span>
-            <button onClick={() => setShowMobileSpec(false)} className="text-xs text-muted-foreground">Close</button>
-          </div>
-          <SpecSummary specs={specs} visible={true} onSubmit={handleSubmitQuote} />
+      {/* Mobile spec backdrop */}
+      <div
+        className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 md:hidden ${
+          showMobileSpec ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setShowMobileSpec(false)}
+        aria-hidden="true"
+      />
+      {/* Mobile spec bottom sheet */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 bg-background border-t border-border rounded-t-2xl z-50 transition-transform duration-300 ease-out flex flex-col max-h-[80vh] pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:hidden ${
+          showMobileSpec ? "translate-y-0 shadow-2xl shadow-amber-500/10" : "translate-y-full"
+        }`}
+      >
+        <div
+          className="w-full flex justify-center pt-4 pb-2 cursor-pointer"
+          onClick={() => setShowMobileSpec(false)}
+        >
+          <div className="w-12 h-1.5 bg-muted-foreground/30 rounded-full" />
         </div>
-      )}
+        <div className="flex-1 overflow-hidden">
+          <SpecSummary
+            specs={specs}
+            visible={true}
+            onSubmit={() => {
+              setShowMobileSpec(false);
+              handleSubmitQuote();
+            }}
+          />
+        </div>
+      </div>
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
@@ -830,7 +851,7 @@ const IndexContent = () => {
         </div>
 
         {/* Spec strip — desktop only */}
-        <div className="hidden md:flex w-[280px] border-l border-border flex-col overflow-y-auto p-3">
+        <div className="hidden md:flex w-[280px] border-l border-border flex-col overflow-y-auto">
           <SpecSummary specs={specs} visible={true} onSubmit={handleSubmitQuote} />
         </div>
       </div>
