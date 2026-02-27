@@ -32,8 +32,8 @@ const StepProgress = ({ currentStep, onStepClick }: StepProgressProps) => {
               type="button"
               disabled={!clickable}
               onClick={() => clickable && onStepClick?.(i)}
-              className={`flex flex-col items-center gap-0.5 bg-transparent border-none p-0 ${
-                clickable ? "cursor-pointer" : "cursor-default"
+              className={`flex flex-col items-center gap-0.5 bg-transparent border-none p-0 transition-transform duration-200 ${
+                clickable ? "cursor-pointer hover:scale-125 hover:brightness-125" : "cursor-default"
               }`}
             >
               <div className={`w-2 h-2 rounded-full transition-all ${
