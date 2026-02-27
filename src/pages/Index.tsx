@@ -798,7 +798,7 @@ const IndexContent = () => {
         {/* Chat area */}
         <div className="flex flex-col flex-1 overflow-hidden">
           {/* Step progress bar */}
-          <StepProgress currentStep={currentStage} />
+          <StepProgress currentStep={currentStage} onStepClick={(id) => setCurrentStage(id)} />
 
           {/* Messages */}
           <main className="flex-1 overflow-y-auto min-h-0">
