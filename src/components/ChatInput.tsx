@@ -1,5 +1,5 @@
 import React, { useState, useEffect, KeyboardEvent, forwardRef } from "react";
-import { Send, Mic, MicOff } from "lucide-react";
+import { Send, Mic, MicOff, ExternalLink } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -135,6 +135,15 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(({ onSend, dis
         <p className="text-[11px] text-muted-foreground text-center mt-2">
           Quote delivered by email after factory review · No pricing shown
         </p>
+        <a
+          href="https://tsfproofing.softr.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1"
+        >
+          Returning customer? Log in to your portal
+          <ExternalLink className="w-3 h-3" />
+        </a>
       </div>
     </div>
   );
