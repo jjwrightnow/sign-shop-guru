@@ -184,7 +184,7 @@ const ChatMessage = ({
         {!isUser && choiceCards && choiceCards.length > 0 && !choicesUsed && (
           <div className={`mt-3 grid gap-2 ${
             choiceType === "grid"
-              ? "grid-cols-2 sm:grid-cols-3"
+              ? "grid-cols-2 sm:grid-cols-4"
               : "grid-cols-1 sm:grid-cols-2"
           }`}>
             {choiceCards.map(card => (
@@ -199,7 +199,7 @@ const ChatMessage = ({
                   <img
                     src={card.imageUrl}
                     alt={card.label}
-                    className="w-full h-20 object-contain rounded-lg bg-muted/20"
+                    className="w-full h-20 object-contain rounded-lg bg-black/20"
                   />
                 ) : card.icon ? (
                   <span className="text-3xl">{card.icon}</span>
